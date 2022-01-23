@@ -1,9 +1,60 @@
 import torch
 import torch.nn as nn
 from torchvision.models.resnet import ResNet, Bottleneck
+from ..utils import split_conv_input_tensor_parallel_group
+from ..mappings import gather_from_tensor_parallel_group, copy_to_tensor_parallel_group, scatter_to_tensor_model_parallel_region
+from torch import Tensor
+from torch import functional as F
+from torch.utils import _pair
+from typing import Optional
 
 num_classes = 1000
  
+def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
+    """3x3 convolution with padding"""
+    return ParallelConv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+                     padding=dilation, groups=groups, bias=False, dilation=dilation)
+
+
+def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv2d:
+    """1x1 convolution"""
+    return ParallelConv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+
+
+class ParallelBottleNeck(Bottleneck):
+    def __init__(self, inplanes: int, planes: int, stride: int, downsample, groups: int, base_width: int, dilation: int, norm_layer):
+        super(ParallelBottleNeck, self).__init__(inplanes, planes, stride, downsample, groups, base_width, dilation, norm_layer)
+        self.conv1 = conv1x1(self.inplanes, self.planes, stride)
+        self.conv2 = conv3x3(self.planes, self.planes, groups, dilation)
+        self.conv3 = conv1x1(self.planes, self.expansion * self.planes)
+
+
+class ParallelConv2d(nn.Conv2d):
+    def __init__(self, in_channels, out_channels, kernel_size,  stride=1,
+                 padding=0, dilation=1, groups=1, bias=True):
+        super(ParallelConv2d, self).__init__(in_channels, out_channels, kernel_size, stride,
+                 padding, dilation, groups, bias, device=torch.cuda.current_device())
+        self.ngpus_per_node = torch.cuda.device_count()
+        
+    def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
+
+        splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size)
+        parallel_weight = copy_to_tensor_parallel_group(weight)
+        if self.padding_mode != 'zeros':
+            return F.conv2d(F.pad(splited_input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
+                            parallel_weight, bias, self.stride,
+                            _pair(0), self.dilation, self.groups)
+        splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride,
+                        self.padding, self.dilation, self.groups)
+        output = gather_from_tensor_parallel_group(splited_output)
+
+        return output
+
+
+
+
+
+
 class ParallelResnet(ResNet):
     def __init__(self, dev0, dev1, *args, **kwargs):
         super(ParallelResnet, self).__init__(
@@ -87,21 +138,20 @@ class PipelinedResnet(ResNet):
  
         return torch.cat(ret)
 
+# resnet 101 임.
+class OwnParallelResnet(ResNet):
+    def __init__(self, num_classes, *args, **kwargs):
+        super(OwnParallelResnet, self).__init__(
+            ParallelBottleNeck, [3, 4, 23, 3], num_classes=num_classes, *args, **kwargs)
 
-def train(model, optimizer, criterion, train_loader, batch_size, dev0, dev1, dev2, dev3):
-    model.train()
-    for batch_counter, (images, labels) in enumerate(train_loader):
-        # images are sent to the first GPU
-        images = images.to(dev0, non_blocking=True)
-        # zero the parameter gradients
-        optimizer.zero_grad()
-        # forward
-        outputs = model(images)
-        # labels (ground truth) are sent to the GPU where the outputs of the model
-        # reside, which in this case is the second GPU 
-        labels = labels.to(outputs.device, non_blocking=True)
-        _, preds = torch.max(outputs, 1)
-        loss = criterion(outputs, labels)
-        # backward + optimize only if in training phase
-        loss.backward()
-        optimizer.step()
+ 
+        self.conv1 = ParallelConv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
+                               bias=False)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(512 * ParallelBottleNeck.expansion, num_classes)
+
+        # 여기서 결과를 all_gather로 합쳐서, columnparallel 고.
+ 
+

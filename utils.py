@@ -1,8 +1,32 @@
 import sys
 
 import torch
+from torch.distributed import get_world_size, get_rank
 from torch.nn.parallel import DistributedDataParallel as torchDDP
 
+# 인풋 이미지 feature를 각 gpu의 Convolution layer에서 사용할 수 있도록 맞게 나눈다.
+def split_conv_input_tensor_parallel_group(_input, ngpus_per_node,kernel_size):
+    """Split the input tensor into ngpus_per_node tensors."""
+    local_rank = get_rank() % ngpus_per_node
+
+    sliced_input = torch.chunk(_input,
+                               ngpus_per_node,
+                               dim=1)
+    if local_rank != (ngpus_per_node-1):
+        sliced_input = torch.cat([sliced_input[local_rank], sliced_input[local_rank + 1][:, :kernel_size]], dim=1)
+
+    return sliced_input[local_rank]
+
+# 인풋 이미지 feature를 각 gpu의 pooling layer에서 사용할 수 있도록 맞게 나눈다.
+def split_pooling_input_tensor_parallel_group(_input, ngpus_per_node, kernel_size):
+    """Split the input tensor into ngpus_per_node tensors."""
+    local_rank = get_rank() % ngpus_per_node
+
+    sliced_input = torch.chunk(_input,
+                               ngpus_per_node,
+                               dim=1)
+
+    return sliced_input[local_rank]
 
 
 def average_losses_across_data_parallel_group(losses):

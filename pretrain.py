@@ -4,7 +4,7 @@ from .global_variables import get_args, get_timers
 from .dataset import build_train_valid_datasets
 from functools import partial
 from .utils import average_losses_across_data_parallel_group
-
+from Distribution_example import pretrain
 
 
 def model_provider():
@@ -12,8 +12,8 @@ def model_provider():
     args = get_args()
 
     #print_rank_0
-    print('Building Resnet50 model...')
-    model = Resnet50(#something nessasary for the model))
+    print('Building Resnet152 model...')
+    model = Resnet152(#something nessasary for the model))
     )
 
     return model
@@ -25,7 +25,7 @@ def train_valid_test_datasets_provider(train_val_test_samples):
     print("Building train, validation, and test datasets" "for VIT ...")
     train_ds, valid_ds = build_train_valid_datasets(data_path=args.data_path)
     #print_rank_0
-    print("> finished creating Resnet50 datasets ...")
+    print("> finished creating Resnet152 datasets ...")
 
     return train_ds, valid_ds, None
     

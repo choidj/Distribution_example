@@ -33,11 +33,11 @@ from .mpu import (set_tensor_model_parallel_rank,
                           set_tensor_model_parallel_world_size)
 
 
-def initialize_resnet50(extra_args_provider=None, args_defaults={},
+def initialize_resnet152(extra_args_provider=None, args_defaults={},
                         ignore_unknown_args=False, allow_no_cuda=False):
     """Set global variables, initialize distributed, and
     set autoresume and random seeds.
-    `allow_no_cuda` should not be set unless using resnet50 for cpu only 
+    `allow_no_cuda` should not be set unless using resnet152 for cpu only 
     data processing. In general this arg should not be set unless you know 
     what you are doing.
     Returns a function to finalize distributed env initialization 
@@ -45,7 +45,7 @@ def initialize_resnet50(extra_args_provider=None, args_defaults={},
     """
     if not allow_no_cuda:
         # Make sure cuda is available.
-        assert torch.cuda.is_available(), 'resnet50 requires CUDA.'
+        assert torch.cuda.is_available(), 'resnet152 requires CUDA.'
 
     # Parse args, build tokenizer, and set adlr-autoresume,
     # tensorboard-writer, and timers.
