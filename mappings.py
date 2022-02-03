@@ -1,7 +1,8 @@
 import torch
-from utils import split_conv_input_tensor_parallel_group, split_pooling_input_tensor_parallel_group
+from mpu.initialize import get_tensor_model_parallel_rank, get_tensor_model_parallel_group
+from utils import split_tensor_along_last_dim
 
-def _split(input_):
+def _split(input_, kernel_size):
     """Split the tensor along its last dimension and keep the
     corresponding slice."""
 
@@ -23,7 +24,7 @@ def _split(input_):
 def _gather(input_):
     """Gather tensors and concatinate along the last dimension."""
 
-    world_size = get_tensor_model_parallel_world_size()
+    world_size = torch.distributed.get_world_size()
     # Bypass the function if we are using only 1 GPU.
     if world_size==1:
         return input_
@@ -45,8 +46,9 @@ def _gather(input_):
 def _reduce(input_):
     """All-reduce the input tensor across model parallel group."""
 
+    world_size = torch.distributed.get_world_size()
     # Bypass the function if we are using only 1 GPU.
-    if get_tensor_model_parallel_world_size()==1:
+    if world_size==1:
         return input_
 
     # All-reduce.

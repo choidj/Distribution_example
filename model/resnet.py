@@ -31,7 +31,7 @@ class ParallelBottleNeck(Bottleneck):
 
 class ParallelConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size,  stride=1,
-                 padding=0, dilation=1, groups=1, bias=True):
+                 padding=0, dilation=1, groups=1, last_cnn=False, bias=True):
         super(ParallelConv2d, self).__init__(in_channels, out_channels, kernel_size, stride,
                  padding, dilation, groups, bias, device=torch.cuda.current_device())
         self.ngpus_per_node = torch.cuda.device_count()
@@ -41,16 +41,15 @@ class ParallelConv2d(nn.Conv2d):
         splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size)
         parallel_weight = copy_to_tensor_parallel_group(weight)
         if self.padding_mode != 'zeros':
-            return F.conv2d(F.pad(splited_input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
+            splited_output = F.conv2d(F.pad(splited_input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
                             parallel_weight, bias, self.stride,
                             _pair(0), self.dilation, self.groups)
-        splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride,
+        else:
+            splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride,
                         self.padding, self.dilation, self.groups)
-        output = gather_from_tensor_parallel_group(splited_output)
+        # output = gather_from_tensor_parallel_group(splited_output)
 
-        return output
-
-
+        return splited_output
 
 
 
@@ -153,5 +152,3 @@ class OwnParallelResnet(ResNet):
         self.fc = nn.Linear(512 * ParallelBottleNeck.expansion, num_classes)
 
         # 여기서 결과를 all_gather로 합쳐서, columnparallel 고.
- 
-
