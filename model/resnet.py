@@ -3,6 +3,8 @@ import torch.nn as nn
 from torchvision.models.resnet import ResNet, Bottleneck
 from ..utils import split_conv_input_tensor_parallel_group
 from ..mappings import gather_from_tensor_parallel_group, copy_to_tensor_parallel_group, scatter_to_tensor_model_parallel_region
+
+import torch.nn.init as init
 from torch import Tensor
 from torch import functional as F
 from torch.utils import _pair
@@ -38,7 +40,7 @@ class ParallelConv2d(nn.Conv2d):
         
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
 
-        splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size)
+        splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size, True)
         parallel_weight = copy_to_tensor_parallel_group(weight)
         if self.padding_mode != 'zeros':
             splited_output = F.conv2d(F.pad(splited_input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
@@ -52,6 +54,126 @@ class ParallelConv2d(nn.Conv2d):
         return splited_output
 
 
+
+class ColumnParallelLinearWithAsyncAllreduce(torch.autograd.Function):
+    """
+    Column-parallel linear layer execution with asynchronous all-reduce
+    execution in backprop.
+    """
+    @staticmethod
+    def forward(ctx, input, weight, bias):
+        ctx.save_for_backward(input, weight)
+        ctx.use_bias = bias is not None
+        output = torch.matmul(input, weight.t())
+        if bias is not None:
+            output = output + bias
+        return output
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        input, weight = ctx.saved_tensors
+        use_bias = ctx.use_bias
+        grad_input = grad_output.matmul(weight)
+        # Asyncronous all-reduce
+        handle = torch.distributed.all_reduce(
+                grad_input, group=get_tensor_model_parallel_group(), async_op=True)
+        # Delay the start of weight gradient computation shortly (3us) to have
+        # all-reduce scheduled first and have GPU resources allocated
+        _ = torch.empty(1, device=grad_output.device) + 1
+        grad_weight = grad_output.t().matmul(input)
+        grad_bias = grad_output.sum(dim=0) if use_bias else None
+        handle.wait()
+        return grad_input, grad_weight, grad_bias
+
+
+
+class ColumnParallelLinear(torch.nn.Module):
+    """Linear layer with column parallelism.
+
+    The linear layer is defined as Y = XA + b. A is parallelized along
+    its second dimension as A = [A_1, ..., A_p].
+
+    Arguments:
+        input_size: first dimension of matrix A.
+        output_size: second dimension of matrix A.
+        bias: If true, add bias
+        gather_output: If true, call all-gether on output and make Y avaiable
+                       to all GPUs, otherwise, every GPU will have its output
+                       which is Y_i = XA_i
+        init_method: method to initialize weights. Note that bias is always set
+                     to zero.
+        stride: For the strided linear layers.
+        keep_master_weight_for_test: This was added for testing and should be
+                                     set to False. It returns the master weights
+                                     used for initialization.
+        skip_bias_add: This was added to enable performance optimations where bias
+                       can be fused with other elementwise operations. we skip 
+                       adding bias but instead return it.
+    """
+
+    def __init__(self, input_size, output_size, bias=True, gather_output=True,
+                 init_method=init.xavier_normal_, stride=1,
+                 keep_master_weight_for_test=False,
+                 skip_bias_add=False):
+        super(ColumnParallelLinear, self).__init__()
+
+        # Keep input parameters
+        self.input_size = input_size
+        self.output_size = output_size
+        self.gather_output = gather_output
+        # Divide the weight matrix along the last dimension.
+        world_size = get_tensor_model_parallel_world_size()
+        self.output_size_per_partition = divide(output_size, world_size)
+        self.skip_bias_add = skip_bias_add
+
+        # Parameters.
+        # Note: torch.nn.functional.linear performs XA^T + b and as a result
+        # we allocate the transpose.
+        # Initialize weight.
+
+
+        self.weight = nn.Parameter(torch.empty(
+            self.output_size_per_partition, self.input_size,
+            device=torch.cuda.current_device()))
+
+
+
+        self.bias = nn.Parameter(torch.empty(
+            self.output_size_per_partition,
+            device=torch.cuda.current_device()))
+
+            # Always initialize bias to zero.
+        with torch.no_grad():
+            self.bias.zero_()
+
+
+
+
+    def forward(self, input_):
+        bias = self.bias if not self.skip_bias_add else None
+
+        if self.async_tensor_model_parallel_allreduce:
+            input_shape = input_.shape
+            input_ = input_.view(input_shape[0] * input_shape[1],input_shape[2])
+            # Maxtrix multiply with asynchronouse all-reduce execution
+            output_parallel = ColumnParallelLinearWithAsyncAllreduce.apply(
+                    input_, self.weight, bias)
+            output_parallel = output_parallel.view(
+                    input_shape[0], input_shape[1], output_parallel.shape[1])
+        else:
+            # Set up backprop all-reduce.
+            input_parallel = copy_to_tensor_model_parallel_region(input_)
+
+            # Matrix multiply.
+            output_parallel = F.linear(input_parallel, self.weight, bias)
+
+        if self.gather_output:
+            # All-gather across the partitions.
+            output = gather_from_tensor_model_parallel_region(output_parallel)
+        else:
+            output = output_parallel
+        output_bias = self.bias if self.skip_bias_add else None
+        return output, output_bias
 
 
 class ParallelResnet(ResNet):
@@ -152,3 +274,6 @@ class OwnParallelResnet(ResNet):
         self.fc = nn.Linear(512 * ParallelBottleNeck.expansion, num_classes)
 
         # 여기서 결과를 all_gather로 합쳐서, columnparallel 고.
+
+
+    

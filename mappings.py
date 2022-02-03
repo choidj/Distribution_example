@@ -2,7 +2,7 @@ import torch
 from mpu.initialize import get_tensor_model_parallel_rank, get_tensor_model_parallel_group
 from utils import split_tensor_along_last_dim
 
-def _split(input_, kernel_size):
+def _split(input_, kernel_size=0, conv=False):
     """Split the tensor along its last dimension and keep the
     corresponding slice."""
 
@@ -12,7 +12,7 @@ def _split(input_, kernel_size):
         return input_
 
     # Split along last dimension.
-    input_list = split_tensor_along_last_dim(input_, world_size)
+    input_list = split_tensor_along_last_dim(input_, world_size, kernel_size, conv)
 
     # Note: torch.split does not create contiguous tensors by default.
     rank = get_tensor_model_parallel_rank()
@@ -94,12 +94,12 @@ class _ScatterToModelParallelRegion(torch.autograd.Function):
     """Split the input and keep only the corresponding chuck to the rank."""
 
     @staticmethod
-    def symbolic(graph, input_):
-        return _split(input_)
+    def symbolic(graph, input_, kerenl_size):
+        return _split(input_, kerenl_size)
 
     @staticmethod
-    def forward(ctx, input_):
-        return _split(input_)
+    def forward(ctx, input_, kerenl_size):
+        return _split(input_, kerenl_size)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -116,8 +116,8 @@ class _GatherFromModelParallelRegion(torch.autograd.Function):
         return _gather(input_)
 
     @staticmethod
-    def backward(ctx, grad_output):
-        return _split(grad_output)
+    def backward(ctx, grad_output, kerenl_size):
+        return _split(grad_output, kerenl_size)
 
 
 class _CopyToModelParallelRegion(torch.autograd.Function):

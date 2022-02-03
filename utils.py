@@ -54,7 +54,7 @@ def divide(numerator, denominator):
     return numerator // denominator
 
 def split_tensor_along_last_dim(tensor, num_partitions,
-                                kernel_size,
+                                kernel_size, conv,
                                 contiguous_split_chunks=False):
     """Split a tensor along its last dimension.
     Arguments:
@@ -67,13 +67,16 @@ def split_tensor_along_last_dim(tensor, num_partitions,
     last_dim = tensor.dim() - 1
     last_dim_size = divide(tensor.size()[last_dim], num_partitions)
     print(last_dim_size)
-
     # Split.
     tensor_list = torch.split(tensor, last_dim_size, dim=last_dim)
-    tensor_custom_split = [torch.cat([tensor_list[i], tensor[:, :, :, ((i+1)*last_dim_size):((i+1)*last_dim_size)+kernel_size-1]], dim=last_dim) for i in range(num_partitions-1)]
+    
+    if conv:
+        tensor_custom_split = [torch.cat([tensor_list[i], tensor[:, :, :, ((i+1)*last_dim_size):((i+1)*last_dim_size)+kernel_size-1]], dim=last_dim) for i in range(num_partitions-1)]
+        tensor_list = tensor_custom_split
+
 
     # Note: torch.split does not create contiguous tensors by default.
     if contiguous_split_chunks:
         return tuple(chunk.contiguous() for chunk in tensor_list)
 
-    return tensor_custom_split
+    return tensor_list
