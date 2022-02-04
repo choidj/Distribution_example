@@ -3,7 +3,8 @@ import torch.nn as nn
 from torchvision.models.resnet import ResNet, Bottleneck
 from ..utils import split_conv_input_tensor_parallel_group
 from ..mappings import gather_from_tensor_parallel_group, copy_to_tensor_parallel_group, scatter_to_tensor_model_parallel_region
-
+from mpu.initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_world_size
+from utils import divide
 import torch.nn.init as init
 from torch import Tensor
 from torch import functional as F
@@ -49,7 +50,7 @@ class ParallelConv2d(nn.Conv2d):
         else:
             splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride,
                         self.padding, self.dilation, self.groups)
-        # output = gather_from_tensor_parallel_group(splited_output)
+        output = gather_from_tensor_parallel_group(splited_output, self.kernel_size, True)
 
         return splited_output
 

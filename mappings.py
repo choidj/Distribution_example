@@ -61,15 +61,15 @@ def reduce_from_tensor_model_parallel_region(input_):
     return _ReduceFromModelParallelRegion.apply(input_)
 
 
-def scatter_to_tensor_model_parallel_region(input_):
-    return _ScatterToModelParallelRegion.apply(input_)
+def scatter_to_tensor_model_parallel_region(input_, kernel_size=0, conv=False):
+    return _ScatterToModelParallelRegion.apply(input_, kernel_size, conv)
 
 
-def gather_from_tensor_parallel_group(input_):
+def gather_from_tensor_parallel_region(input_):
     return _GatherFromModelParallelRegion.apply(input_)
 
 
-def copy_to_tensor_parallel_group(input_):
+def copy_to_tensor_parallel_region(input_):
     return _CopyToModelParallelRegion.apply(input_)
 
 
@@ -94,12 +94,12 @@ class _ScatterToModelParallelRegion(torch.autograd.Function):
     """Split the input and keep only the corresponding chuck to the rank."""
 
     @staticmethod
-    def symbolic(graph, input_, kerenl_size):
-        return _split(input_, kerenl_size)
+    def symbolic(graph, input_, kernel_size, conv):
+        return _split(input_, kernel_size, conv)
 
     @staticmethod
-    def forward(ctx, input_, kerenl_size):
-        return _split(input_, kerenl_size)
+    def forward(ctx, input_, kernel_size, conv):
+        return _split(input_, kernel_size, conv)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -116,8 +116,8 @@ class _GatherFromModelParallelRegion(torch.autograd.Function):
         return _gather(input_)
 
     @staticmethod
-    def backward(ctx, grad_output, kerenl_size):
-        return _split(grad_output, kerenl_size)
+    def backward(ctx, grad_output, kernel_size, conv):
+        return _split(grad_output, kernel_size, conv)
 
 
 class _CopyToModelParallelRegion(torch.autograd.Function):
