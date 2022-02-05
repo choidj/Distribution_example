@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 from torchvision.models.resnet import ResNet, Bottleneck
+
 from ..utils import split_conv_input_tensor_parallel_group
-from ..mappings import gather_from_tensor_parallel_group, copy_to_tensor_parallel_group, scatter_to_tensor_model_parallel_region
+from ..mappings import gather_from_tensor_parallel_region, copy_to_tensor_parallel_region, scatter_to_tensor_model_parallel_region
 from mpu.initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_world_size
 from utils import divide
 import torch.nn.init as init
@@ -25,8 +26,8 @@ def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv2d:
 
 
 class ParallelBottleNeck(Bottleneck):
-    def __init__(self, inplanes: int, planes: int, stride: int, downsample, groups: int, base_width: int, dilation: int, norm_layer):
-        super(ParallelBottleNeck, self).__init__(inplanes, planes, stride, downsample, groups, base_width, dilation, norm_layer)
+    def __init__(self, inplanes: int, planes: int, stride: int, downsample, groups: int, base_width: int, dilation: int, norm_layer, **kwargs):
+        super(ParallelBottleNeck, self).__init__(inplanes, planes, stride, downsample, groups, base_width, dilation, norm_layer, **kwargs)
         self.conv1 = conv1x1(self.inplanes, self.planes, stride)
         self.conv2 = conv3x3(self.planes, self.planes, groups, dilation)
         self.conv3 = conv1x1(self.planes, self.expansion * self.planes)
@@ -34,15 +35,15 @@ class ParallelBottleNeck(Bottleneck):
 
 class ParallelConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size,  stride=1,
-                 padding=0, dilation=1, groups=1, last_cnn=False, bias=True):
+                 padding=0, dilation=1, groups=1, last_cnn=False, bias=True, **kwargs):
         super(ParallelConv2d, self).__init__(in_channels, out_channels, kernel_size, stride,
-                 padding, dilation, groups, bias, device=torch.cuda.current_device())
+                 padding, dilation, groups, bias, device=torch.cuda.current_device(), **kwargs)
         self.ngpus_per_node = torch.cuda.device_count()
         
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
 
         splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size, True)
-        parallel_weight = copy_to_tensor_parallel_group(weight)
+        parallel_weight = copy_to_tensor_parallel_region(weight)
         if self.padding_mode != 'zeros':
             splited_output = F.conv2d(F.pad(splited_input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
                             parallel_weight, bias, self.stride,
@@ -50,45 +51,14 @@ class ParallelConv2d(nn.Conv2d):
         else:
             splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride,
                         self.padding, self.dilation, self.groups)
-        output = gather_from_tensor_parallel_group(splited_output, self.kernel_size, True)
+        output = gather_from_tensor_parallel_region(splited_output, self.kernel_size, True)
 
-        return splited_output
-
-
-
-class ColumnParallelLinearWithAsyncAllreduce(torch.autograd.Function):
-    """
-    Column-parallel linear layer execution with asynchronous all-reduce
-    execution in backprop.
-    """
-    @staticmethod
-    def forward(ctx, input, weight, bias):
-        ctx.save_for_backward(input, weight)
-        ctx.use_bias = bias is not None
-        output = torch.matmul(input, weight.t())
-        if bias is not None:
-            output = output + bias
         return output
 
-    @staticmethod
-    def backward(ctx, grad_output):
-        input, weight = ctx.saved_tensors
-        use_bias = ctx.use_bias
-        grad_input = grad_output.matmul(weight)
-        # Asyncronous all-reduce
-        handle = torch.distributed.all_reduce(
-                grad_input, group=get_tensor_model_parallel_group(), async_op=True)
-        # Delay the start of weight gradient computation shortly (3us) to have
-        # all-reduce scheduled first and have GPU resources allocated
-        _ = torch.empty(1, device=grad_output.device) + 1
-        grad_weight = grad_output.t().matmul(input)
-        grad_bias = grad_output.sum(dim=0) if use_bias else None
-        handle.wait()
-        return grad_input, grad_weight, grad_bias
 
 
 
-class ColumnParallelLinear(torch.nn.Module):
+class ColumnParallelLinear(torch.nn.Linear):
     """Linear layer with column parallelism.
 
     The linear layer is defined as Y = XA + b. A is parallelized along
@@ -112,20 +82,17 @@ class ColumnParallelLinear(torch.nn.Module):
                        adding bias but instead return it.
     """
 
-    def __init__(self, input_size, output_size, bias=True, gather_output=True,
-                 init_method=init.xavier_normal_, stride=1,
-                 keep_master_weight_for_test=False,
-                 skip_bias_add=False):
+    def __init__(self, in_features: int, out_features: int, bias: bool = True,
+                 device=None, dtype=None):
         super(ColumnParallelLinear, self).__init__()
 
         # Keep input parameters
-        self.input_size = input_size
-        self.output_size = output_size
-        self.gather_output = gather_output
+        self.in_features = in_features
+        self.out_features = out_features
+
         # Divide the weight matrix along the last dimension.
         world_size = get_tensor_model_parallel_world_size()
-        self.output_size_per_partition = divide(output_size, world_size)
-        self.skip_bias_add = skip_bias_add
+        self.output_size_per_partition = divide(out_features, world_size)
 
         # Parameters.
         # Note: torch.nn.functional.linear performs XA^T + b and as a result
@@ -137,8 +104,6 @@ class ColumnParallelLinear(torch.nn.Module):
             self.output_size_per_partition, self.input_size,
             device=torch.cuda.current_device()))
 
-
-
         self.bias = nn.Parameter(torch.empty(
             self.output_size_per_partition,
             device=torch.cuda.current_device()))
@@ -149,28 +114,18 @@ class ColumnParallelLinear(torch.nn.Module):
 
 
 
-
     def forward(self, input_):
         bias = self.bias if not self.skip_bias_add else None
 
-        if self.async_tensor_model_parallel_allreduce:
-            input_shape = input_.shape
-            input_ = input_.view(input_shape[0] * input_shape[1],input_shape[2])
-            # Maxtrix multiply with asynchronouse all-reduce execution
-            output_parallel = ColumnParallelLinearWithAsyncAllreduce.apply(
-                    input_, self.weight, bias)
-            output_parallel = output_parallel.view(
-                    input_shape[0], input_shape[1], output_parallel.shape[1])
-        else:
-            # Set up backprop all-reduce.
-            input_parallel = copy_to_tensor_model_parallel_region(input_)
+        # Set up backprop all-reduce.
+        input_parallel = copy_to_tensor_parallel_region(input_)
 
-            # Matrix multiply.
-            output_parallel = F.linear(input_parallel, self.weight, bias)
+        # Matrix multiply.
+        output_parallel = F.linear(input_parallel, self.weight, bias)
 
         if self.gather_output:
             # All-gather across the partitions.
-            output = gather_from_tensor_model_parallel_region(output_parallel)
+            output = gather_from_tensor_parallel_region(output_parallel)
         else:
             output = output_parallel
         output_bias = self.bias if self.skip_bias_add else None
@@ -272,7 +227,7 @@ class OwnParallelResnet(ResNet):
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(512 * ParallelBottleNeck.expansion, num_classes)
+        self.fc = ColumnParallelLinear(512 * ParallelBottleNeck.expansion, num_classes)
 
         # 여기서 결과를 all_gather로 합쳐서, columnparallel 고.
 
