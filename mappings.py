@@ -65,8 +65,8 @@ def scatter_to_tensor_model_parallel_region(input_, kernel_size=0, conv=False):
     return _ScatterToModelParallelRegion.apply(input_, kernel_size, conv)
 
 
-def gather_from_tensor_parallel_region(input_):
-    return _GatherFromModelParallelRegion.apply(input_)
+def gather_from_tensor_parallel_region(input_, kernel_size=0, conv=False):
+    return _GatherFromModelParallelRegion.apply(input_, kernel_size, conv)
 
 
 def copy_to_tensor_parallel_region(input_):
