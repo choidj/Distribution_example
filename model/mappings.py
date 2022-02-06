@@ -1,5 +1,5 @@
 import torch
-from ..mpu.initialize import get_tensor_model_parallel_rank, get_tensor_model_parallel_group
+from initialize import get_tensor_model_parallel_rank, get_tensor_model_parallel_group
 from utils import split_tensor_along_last_dim
 
 def _split(input_, kernel_size=0, conv=False):
