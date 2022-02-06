@@ -113,7 +113,7 @@ class ColumnParallelLinear(torch.nn.Linear):
 
 
         self.weight = nn.Parameter(torch.empty(
-            self.output_size_per_partition, self.input_size,
+            self.output_size_per_partition, self.in_features,
             device=torch.cuda.current_device()))
 
         self.bias = nn.Parameter(torch.empty(
