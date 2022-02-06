@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision.models.resnet import ResNet, Bottleneck
 
-from mappings import gather_from_tensor_parallel_region, copy_to_tensor_parallel_region, scatter_to_tensor_model_parallel_region
+from .mappings import gather_from_tensor_model_parallel_region, copy_to_tensor_model_parallel_region, scatter_to_tensor_model_parallel_region
 from .initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_world_size
 from .utils import divide
 import torch.nn.init as init
