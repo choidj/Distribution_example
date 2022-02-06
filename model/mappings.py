@@ -1,5 +1,5 @@
 import torch
-from mpu.initialize import get_tensor_model_parallel_rank, get_tensor_model_parallel_group
+from ..mpu.initialize import get_tensor_model_parallel_rank, get_tensor_model_parallel_group
 from utils import split_tensor_along_last_dim
 
 def _split(input_, kernel_size=0, conv=False):
@@ -65,11 +65,11 @@ def scatter_to_tensor_model_parallel_region(input_, kernel_size=0, conv=False):
     return _ScatterToModelParallelRegion.apply(input_, kernel_size, conv)
 
 
-def gather_from_tensor_parallel_region(input_, kernel_size=0, conv=False):
+def gather_from_tensor_model_parallel_region(input_, kernel_size=0, conv=False):
     return _GatherFromModelParallelRegion.apply(input_, kernel_size, conv)
 
 
-def copy_to_tensor_parallel_region(input_):
+def copy_to_tensor_model_parallel_region(input_):
     return _CopyToModelParallelRegion.apply(input_)
 
 

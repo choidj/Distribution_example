@@ -19,8 +19,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 
-from train import main_worker
-from .model.resnet import OwnParallelResnet
+from model.resnet import OwnParallelResnet
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
 parser.add_argument('data', metavar='DIR',
