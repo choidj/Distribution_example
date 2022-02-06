@@ -4,12 +4,12 @@ from torchvision.models.resnet import ResNet, Bottleneck
 
 from mappings import gather_from_tensor_parallel_region, copy_to_tensor_parallel_region, scatter_to_tensor_model_parallel_region
 from .initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_world_size
-from utils import divide
+from .utils import divide
 import torch.nn.init as init
 from torch import Tensor
 from torch import functional as F
 from torch.utils import _pair
-from typing import Optional
+from typing import Optional, Callable
 
 num_classes = 1000
  
@@ -25,8 +25,20 @@ def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv2d:
 
 
 class ParallelBottleNeck(Bottleneck):
-    def __init__(self, inplanes: int, planes: int, stride: int, downsample, groups: int, base_width: int, dilation: int, norm_layer, **kwargs):
+    def __init__(self,
+        inplanes: int,
+        planes: int,
+        stride: int = 1,
+        downsample: Optional[nn.Module] = None,
+        groups: int = 1,
+        base_width: int = 64,
+        dilation: int = 1,
+        norm_layer: Optional[Callable[..., nn.Module]] = None,
+        **kwargs):
         super(ParallelBottleNeck, self).__init__(inplanes, planes, stride, downsample, groups, base_width, dilation, norm_layer, **kwargs)
+        self.inplanes = inplanes
+        self.planes = planes
+        
         self.conv1 = conv1x1(self.inplanes, self.planes, stride)
         self.conv2 = conv3x3(self.planes, self.planes, groups, dilation)
         self.conv3 = conv1x1(self.planes, self.expansion * self.planes)
@@ -82,8 +94,9 @@ class ColumnParallelLinear(torch.nn.Linear):
     """
 
     def __init__(self, in_features: int, out_features: int, bias: bool = True,
-                 device=None, dtype=None):
-        super(ColumnParallelLinear, self).__init__()
+                 device=None, dtype=None, **kwargs):
+        super(ColumnParallelLinear, self).__init__(in_features, out_features, bias,
+                 device, dtype, **kwargs)
 
         # Keep input parameters
         self.in_features = in_features
@@ -219,7 +232,7 @@ class OwnParallelResnet(ResNet):
     def __init__(self, num_classes, *args, **kwargs):
         super(OwnParallelResnet, self).__init__(
             ParallelBottleNeck, [3, 4, 23, 3], num_classes=num_classes, *args, **kwargs)
-
+        
  
         self.conv1 = ParallelConv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
                                bias=False)
