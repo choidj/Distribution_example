@@ -10,20 +10,20 @@ def _split(input_, kernel_size=0, conv=False):
     # Bypass the function if we are using only 1 GPU.
     if world_size==1:
         return input_
-
+    print("[rank {}] GPU to split input size : {}".format(str(rank), str(input_.size())))
     # Split along last dimension.
     input_list = split_tensor_along_last_dim(input_, world_size, kernel_size, conv)
 
     # Note: torch.split does not create contiguous tensors by default.
     rank = get_tensor_model_parallel_rank()
     output = input_list[rank].contiguous() # 새로운 주소로 할당함.
-
+    print("[rank {}] GPU splited output size : {}".format(str(rank), str(output.size())))
     return output
 
 
 def _gather(input_):
     """Gather tensors and concatinate along the last dimension."""
-
+    
     world_size = torch.distributed.get_world_size()
     # Bypass the function if we are using only 1 GPU.
     if world_size==1:
@@ -32,14 +32,14 @@ def _gather(input_):
     # Size and dimension.
     last_dim = input_.dim() - 1
     rank = get_tensor_model_parallel_rank()
-
+    print("[rank {}] GPU to gather input size : {}".format(str(rank), str(input_.size())))
     tensor_list = [torch.empty_like(input_) for _ in range(world_size)]
     tensor_list[rank] = input_
     torch.distributed.all_gather(tensor_list, input_, group=get_tensor_model_parallel_group())
 
     # Note: torch.cat already creates a contiguous tensor.
     output = torch.cat(tensor_list, dim=last_dim).contiguous()
-
+    print("[rank {}] GPU gathered input size : {}".format(str(rank), str(output.size())))
     return output
 
 
@@ -108,11 +108,11 @@ class _ScatterToModelParallelRegion(torch.autograd.Function):
 
 class _GatherFromModelParallelRegion(torch.autograd.Function):
     @staticmethod
-    def symbolic(graph, input_):
+    def symbolic(graph, input_, kernel_size, conv):
         return _gather(input_)
     
     @staticmethod
-    def forward(ctx, input_):
+    def forward(ctx, input_, kernel_size, conv):
         return _gather(input_)
 
     @staticmethod
