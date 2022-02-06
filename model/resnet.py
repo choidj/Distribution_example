@@ -8,7 +8,7 @@ from .utils import divide
 import torch.nn.init as init
 from torch import Tensor
 from torch import functional as F
-from torch.utils import _pair
+from torch.nn.modules.utils import _pair
 from typing import Optional, Callable
 
 num_classes = 1000
@@ -54,7 +54,7 @@ class ParallelConv2d(nn.Conv2d):
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
 
         splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size, True)
-        parallel_weight = copy_to_tensor_parallel_region(weight)
+        parallel_weight = copy_to_tensor_model_parallel_region(weight)
         if self.padding_mode != 'zeros':
             splited_output = F.conv2d(F.pad(splited_input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
                             parallel_weight, bias, self.stride,
@@ -62,7 +62,7 @@ class ParallelConv2d(nn.Conv2d):
         else:
             splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride,
                         self.padding, self.dilation, self.groups)
-        output = gather_from_tensor_parallel_region(splited_output, self.kernel_size, True)
+        output = gather_from_tensor_model_parallel_region(splited_output, self.kernel_size, True)
 
         return output
 
@@ -130,14 +130,14 @@ class ColumnParallelLinear(torch.nn.Linear):
         bias = self.bias if not self.skip_bias_add else None
 
         # Set up backprop all-reduce.
-        input_parallel = copy_to_tensor_parallel_region(input_)
+        input_parallel = copy_to_tensor_model_parallel_region(input_)
 
         # Matrix multiply.
         output_parallel = F.linear(input_parallel, self.weight, bias)
 
         if self.gather_output:
             # All-gather across the partitions.
-            output = gather_from_tensor_parallel_region(output_parallel)
+            output = gather_from_tensor_model_parallel_region(output_parallel)
         else:
             output = output_parallel
         output_bias = self.bias if self.skip_bias_add else None

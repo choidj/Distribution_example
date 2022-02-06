@@ -18,6 +18,7 @@ import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
+from model.initialize import initialize_model_parallel
 
 from model.resnet import OwnParallelResnet
 
@@ -109,7 +110,7 @@ def main_worker(gpu, ngpus_per_node, args):
             args.rank = args.rank * ngpus_per_node + gpu
         # torch distributed 초기화함. 여기서 world_size는 모든 분산처리 시스템에 가담하는 GPU 개수이고, rank는 현재 프로세스가 사용할 GPU의 id를 말한다. 
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url, world_size=args.world_size, rank=args.rank)
-
+    initialize_model_parallel()
     # resnet model 생성.
     model = OwnParallelResnet(100)
 
