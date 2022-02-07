@@ -10,12 +10,12 @@ def _split(input_, kernel_size=0, conv=False):
     # Bypass the function if we are using only 1 GPU.
     if world_size==1:
         return input_
+    rank = get_tensor_model_parallel_rank()
     print("[rank {}] GPU to split input size : {}".format(str(rank), str(input_.size())))
     # Split along last dimension.
     input_list = split_tensor_along_last_dim(input_, world_size, kernel_size, conv)
 
     # Note: torch.split does not create contiguous tensors by default.
-    rank = get_tensor_model_parallel_rank()
     output = input_list[rank].contiguous() # 새로운 주소로 할당함.
     print("[rank {}] GPU splited output size : {}".format(str(rank), str(output.size())))
     return output
