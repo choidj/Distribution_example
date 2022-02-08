@@ -91,7 +91,6 @@ def main():
     # multiprocessing_distributed 변수가 true라면, world_size를 총 GPU개수로 설정한 후에, 메인 워커를 실행함.
     if args.multiprocessing_distributed:
         args.world_size = ngpus_per_node * args.world_size
-        print("here")
         mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
     else:
         main_worker(args.gpu, ngpus_per_node, args)
