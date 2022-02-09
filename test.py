@@ -7,7 +7,9 @@ import torch.distributed as dist
 
 
 def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
+    
     if rank == 0:
+        torch.set_printoptions(profile="full")
         start = torch.cuda.Event(enable_timing=True) 
         end = torch.cuda.Event(enable_timing=True) 
     
