@@ -25,7 +25,7 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
         serial_result = serial_conv_(input_)
         end.record()
         print(start.elapsed_time(end))
-
+        print("[ Master Rank ] Serial : Index ( 0, 0, 0, 0 ~ 30) ", serial_result[0, 0, 0, 0:30])
         #for p in serial_conv.parameters():
             #print("serial weight :",  p)
    
@@ -43,12 +43,12 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
         print("[ Master Rank ] Parallel : ", parallel_result)
         print("[ Master Rank ] Serial : ", serial_result)
         
-        for a in range(serial_result.size()[0]):
-            for b in range(serial_result.size()[1]):
-                for c in range(serial_result.size()[2]):
-                    for d in range(serial_result.size()[3]):
-                        if not torch.allclose(serial_result[a][b][c][d], parallel_result[a][b][c][d]):
-                            print("[ Master Rank ] Result is not the same : Index ( {}, {}, {}, {}), Serial {}, Parallel {}".format(a, b, c, d, serial_result[a][b][c][d], parallel_result[a][b][c][d]))
+        # for a in range(serial_result.size()[0]):
+        #     for b in range(serial_result.size()[1]):
+        #         for c in range(serial_result.size()[2]):
+        #             for d in range(serial_result.size()[3]):
+        #                 if not torch.allclose(serial_result[a][b][c][d], parallel_result[a][b][c][d]):
+        #                     print("[ Master Rank ] Result is not the same : Index ( {}, {}, {}, {}), Serial {}, Parallel {}".format(a, b, c, d, serial_result[a][b][c][d], parallel_result[a][b][c][d]))
 
         # parallel_result and serial_result should be the same
         assert torch.allclose(parallel_result, serial_result), "Parallel and Serial results are not the same"

@@ -12,14 +12,14 @@ def _split(input_, kernel_size=0, conv=False):
         return input_
     rank = get_tensor_model_parallel_rank()
     
-    print("[rank {} GPU] **TO SPLIT** Input Size : {}".format(str(rank), str(input_.size())))
+    print("[Rank {} GPU] **TO SPLIT** Input Size : {}".format(str(rank), str(input_.size())))
     # Split along last dimension.
     input_list = split_tensor_along_last_dim(input_, world_size, kernel_size, conv)
 
     # Note: torch.split does not create contiguous tensors by default.
     output = input_list[rank].contiguous() # 새로운 주소로 할당함.
     
-    print("[rank {} GPU] **SPLITED** Output Size : {}".format(str(rank), str(output.size())))
+    print("[Rank {} GPU] **SPLITED** Output Size : {}".format(str(rank), str(output.size())))
     return output
 
 
@@ -35,24 +35,26 @@ def _gather(input_, kernel_size=0, conv=False):
     last_dim = input_.dim() - 1
     rank = get_tensor_model_parallel_rank()
     
-    print("[rank {} GPU] **TO GATHER** Input Size : {}".format(str(rank), str(input_.size())))
+    print("[Rank {} GPU] **TO GATHER** Input Size : {}".format(str(rank), str(input_.size())))
+    if rank == 0:
+        print("[Rank {} GPU] **TO GATHER** Input : Index (0, 0, 0, 0 ~ 30) -> ".format(str(rank)), input_)
     result_kernel_size = divide(kernel_size[0] - 1, 2)
 
     if conv and rank != (world_size-1):
         input_ = input_[:, :, :, :-result_kernel_size].contiguous()
-        print("[rank {} GPU] **TO GATHER** Input Splited Size : {}".format(str(rank), str(input_.size())))
+        print("[Rank {} GPU] **TO GATHER** Input Splited Size : {}".format(str(rank), str(input_.size())))
     
     tensor_list = [torch.empty_like(input_) for _ in range(world_size)]
     tensor_list[rank] = input_
     
     for i in range(world_size):
-        print("[rank {} GPU] **TO GATHER** Prepared Input List Size[{}] : {}".format(str(rank), str(i), str(tensor_list[i].size()))) 
+        print("[Rank {} GPU] **TO GATHER** Prepared Input List Size[{}] : {}".format(str(rank), str(i), str(tensor_list[i].size()))) 
     torch.distributed.all_gather(tensor_list, input_, group=get_tensor_model_parallel_group())
 
     # Note: torch.cat already creates a contiguous tensor.
     output = torch.cat(tensor_list, dim=last_dim).contiguous()
     
-    print("[rank {} GPU] **GATHERED** Output Size : {}".format(str(rank), str(output.size())))
+    print("[Rank {} GPU] **GATHERED** Output Size : {}".format(str(rank), str(output.size())))
     
     return output
 
