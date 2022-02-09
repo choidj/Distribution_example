@@ -16,6 +16,7 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
     #for p in parallel_conv.parameters():
         #print("[ rank {} ] parallel weight : ".format(str(rank)), p)
     torch.cuda.set_device(rank)
+    torch.cuda.synchronize()
     input_ = input_data.cuda(rank)
     parallel_conv_ = parallel_conv.cuda(rank)
     if rank == 0:
@@ -36,11 +37,19 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
         print(start.elapsed_time(end))
 
     if rank == 0:
-        print("[Device : {} ]".format(str(torch.cuda.current_device())))
-        print("Parallel Result Shape : ", parallel_result.size())
-        print("Serial Result Shape : ", serial_result.size())
-        print("Parallel : ", parallel_result)
-        print("Serial : ", serial_result)
+        print("[ Master Rank  : {} ]".format(str(torch.cuda.current_device())))
+        print("[ Master Rank ] Parallel Result Shape : ", parallel_result.size())
+        print("[ Master Rank ] Serial Result Shape : ", serial_result.size())
+        print("[ Master Rank ] Parallel : ", parallel_result)
+        print("[ Master Rank ] Serial : ", serial_result)
+        
+        for a in range(serial_result.size()[0]):
+            for b in range(serial_result.size()[1]):
+                for c in range(serial_result()[2]):
+                    for d in range(serial_result()[3]):
+                        if not torch.allclose(serial_result[a][b][c][d], parallel_result[a][b][c][d]):
+                            print("[ Master Rank ] Result is not the same : Serial {}, Parallel {}".format(serial_result[a][b][c][d], parallel_result[a][b][c][d]))
+
         # parallel_result and serial_result should be the same
         assert torch.allclose(parallel_result, serial_result), "Parallel and Serial results are not the same"
         print("Conv layer Test Passed!!")

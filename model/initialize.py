@@ -28,7 +28,6 @@ def initialize_model_parallel():
     
     Arguments:
         self.tensor_model_parallel_size: number of GPUs used for tensor model parallelism. Now we only support 4 GPUs.
-        self.pipeline_model_parallel_size: number of GPUs used for pipeline model parallelism. Now we don't support pipeline model parallelism.
     """
     if torch.distributed.get_rank() == 0:
         print('> initializing parallel work')
