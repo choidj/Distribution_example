@@ -37,7 +37,7 @@ def _gather(input_, kernel_size=0, conv=False):
     
     print("[Rank {} GPU] **TO GATHER** Input Size : {}".format(str(rank), str(input_.size())))
     if rank == 0:
-        print("[Rank {} GPU] **TO GATHER** Input : Index (0, 0, 0, 0 ~ 30) -> ".format(str(rank)), input_[0, 0, 0, 0:30])
+        print("[Rank {} GPU] **TO GATHER** Input : Index (0, 0, 0, 0 ~ 30) -> ".format(str(rank)), input_[0][0][0][0:30])
     result_kernel_size = divide(kernel_size[0] - 1, 2)
 
     if conv and rank != (world_size-1):
