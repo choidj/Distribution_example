@@ -7,7 +7,7 @@ import torch.distributed as dist
 
 
 def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
-    if rank:
+    if rank == 0:
         start = torch.cuda.Event(enable_timing=True) 
         end = torch.cuda.Event(enable_timing=True) 
     
@@ -16,11 +16,12 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
     #for p in parallel_conv.parameters():
         #print("[ rank {} ] parallel weight : ".format(str(rank)), p)
     torch.cuda.set_device(rank)
-    input_data.cuda(rank)
-    parallel_conv.cuda(rank)
+    input_ = input_data.cuda(rank)
+    parallel_conv_ = parallel_conv.cuda(rank)
     if rank == 0:
         start.record()
-        serial_conv.cuda(rank)
+        serial_conv_ = serial_conv.cuda(rank)
+        serial_result = serial_conv_(input_)
         end.record()
         print(start.elapsed_time(end))
 
@@ -28,15 +29,14 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
             #print("serial weight :",  p)
    
         start.record()
-    parallel_result = parallel_conv(input_data)
+    parallel_result = parallel_conv_(input_)
     if rank == 0:
         end.record()
-        
+
         print(start.elapsed_time(end))
 
     if rank == 0:
         print("[Device : {} ]".format(str(torch.cuda.current_device())))
-        serial_result = serial_conv(input_data)
         print("Parallel Result Shape : ", parallel_result.size())
         print("Serial Result Shape : ", serial_result.size())
         print("Parallel : ", parallel_result)
