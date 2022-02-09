@@ -45,8 +45,8 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
         
         for a in range(serial_result.size()[0]):
             for b in range(serial_result.size()[1]):
-                for c in range(serial_result().size()[2]):
-                    for d in range(serial_result().size()[3]):
+                for c in range(serial_result.size()[2]):
+                    for d in range(serial_result.size()[3]):
                         if not torch.allclose(serial_result[a][b][c][d], parallel_result[a][b][c][d]):
                             print("[ Master Rank ] Result is not the same : Serial {}, Parallel {}".format(serial_result[a][b][c][d], parallel_result[a][b][c][d]))
 
