@@ -27,7 +27,7 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
         serial_result = serial_conv_(input_)
         end.record()
         print(start.elapsed_time(end))
-        print("[ Master Rank ] Serial : Index ( 0, 0, 0, 0 ~ 30) ", serial_result[0][0][0][0:30])
+        print("[ Master Rank ] Serial : Index ( 0, 0, 0, 0 ~ 30) ", serial_result[0][0][0][:])
         #for p in serial_conv.parameters():
             #print("serial weight :",  p)
    
