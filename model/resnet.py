@@ -60,7 +60,7 @@ class ParallelConv2d(nn.Conv2d):
                             _pair(0), self.dilation, self.groups)
         else:
             splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size, self.padding, True)
-            splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride, self.dilation, self.groups)
+            splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride, self.dilation, self.groups, padding=0)
         output = gather_from_tensor_model_parallel_region(splited_output, self.kernel_size, padding=0, conv=True)
 
         return output
