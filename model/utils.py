@@ -69,7 +69,7 @@ def split_tensor_along_last_dim(tensor, num_partitions,
     rank = get_tensor_model_parallel_rank()
     
     pad = ()
-    print(padding[0])
+
     if rank == 0:
         pad = (padding[0], 0, padding[0], padding[0])
     elif rank == num_partitions - 1:
@@ -87,18 +87,19 @@ def split_tensor_along_last_dim(tensor, num_partitions,
     # Split.
     tensor_list = torch.split(tensor, last_dim_size, dim=last_dim)
 
-    padded_tensor = F.pad(tensor_list[rank], pad)
 
     if rank == 0:
-        for i, t in enumerate(padded_tensor):
+        for i, t in enumerate(tensor_list):
             print("[Master GPU] **TO SPLIT** Splited Input[{}] : ".format(str(i)), t[0][0][0])
     
     if conv and rank != num_partitions - 1:
-        tensor_custom_split = torch.cat([padded_tensor, tensor[:, :, :, ((rank+1)*last_dim_size):((rank+1)*last_dim_size)+kernel_size[0]-1]], dim=last_dim)
+        tensor_custom_split = torch.cat([tensor_list, tensor[:, :, :, ((rank+1)*last_dim_size):((rank+1)*last_dim_size)+kernel_size[0]-1]], dim=last_dim)
         tensor_list[rank] = tensor_custom_split
         if rank == 0:
             for i, t in enumerate(tensor_list):
                 print("[Master GPU] **TO CUSTOM SPLIT** Splited Input[{}] : ".format(str(i)), t[0][0][0])
+
+    tensor_list[rank] = F.pad(tensor_list[rank], pad)
     # Note: torch.split does not create contiguous tensors by default.
     if contiguous_split_chunks:
         return tuple(chunk.contiguous() for chunk in tensor_list)
