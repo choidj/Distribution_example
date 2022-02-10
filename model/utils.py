@@ -3,8 +3,9 @@ import sys
 import torch
 from torch.distributed import get_world_size, get_rank
 from torch.nn.parallel import DistributedDataParallel as torchDDP
+import torch.nn.functional as F
 
-from .initialize import get_tensor_model_parallel_rank
+from .initialize import get_tensor_model_parallel_rank, get_tensor_model_parallel_world_size
 
 # 인풋 이미지 feature를 각 gpu의 Convolution layer에서 사용할 수 있도록 맞게 나눈다.
 def split_conv_input_tensor_parallel_group(_input, ngpus_per_node,kernel_size):
@@ -56,7 +57,7 @@ def divide(numerator, denominator):
     return numerator // denominator
 
 def split_tensor_along_last_dim(tensor, num_partitions,
-                                kernel_size, conv,
+                                kernel_size, padding, conv,
                                 contiguous_split_chunks=False):
     """Split a tensor along its last dimension.
     Arguments:
@@ -65,27 +66,40 @@ def split_tensor_along_last_dim(tensor, num_partitions,
         contiguous_split_chunks: If True, make each chunk contiguous
                                  in memory.
     """
+    rank = get_tensor_model_parallel_rank()
+    world = get_tensor_model_parallel_world_size()
+    
+    pad = ()
+
+    if rank == 0:
+        pad = (padding, 0, padding, padding)
+    elif rank == world - 1:
+        pad = (0, padding, padding, padding)
+    else:
+        pad = (0, 0, padding, padding)
+
     # Get the size and dimension.
     last_dim = tensor.dim() - 1
-    rank = get_tensor_model_parallel_rank()
+    
     last_dim_size = divide(tensor.size()[last_dim], num_partitions)
     if rank == 0:
         print("[Master GPU] **TO SPLIT** Original Input : ", tensor[0][0][0])
     
     # Split.
     tensor_list = torch.split(tensor, last_dim_size, dim=last_dim)
-    if rank == 0:
 
-        for i, t in enumerate(tensor_list):
+    padded_tensor = F.pad(tensor_list[rank], pad)
+
+    if rank == 0:
+        for i, t in enumerate(padded_tensor):
             print("[Master GPU] **TO SPLIT** Splited Input[{}] : ".format(str(i)), t[0][0][0])
     
-    if conv:
-        tensor_custom_split = [torch.cat([tensor_list[i], tensor[:, :, :, ((i+1)*last_dim_size):((i+1)*last_dim_size)+kernel_size[0]-1]], dim=last_dim) for i in range(num_partitions-1)]
-        tensor_custom_split.append(tensor_list[num_partitions-1])
-        tensor_list = tensor_custom_split
-
-    for i, t in enumerate(tensor_list):
-        print("[Master GPU] **TO CUSTOM SPLIT** Splited Input[{}] : ".format(str(i)), t[0][0][0])
+    if conv and rank != world - 1:
+        tensor_custom_split = torch.cat([padded_tensor, tensor[:, :, :, ((rank+1)*last_dim_size):((rank+1)*last_dim_size)+kernel_size[0]-1]], dim=last_dim)
+        tensor_list[rank] = tensor_custom_split
+        if rank == 0:
+            for i, t in enumerate(tensor_list):
+                print("[Master GPU] **TO CUSTOM SPLIT** Splited Input[{}] : ".format(str(i)), t[0][0][0])
     # Note: torch.split does not create contiguous tensors by default.
     if contiguous_split_chunks:
         return tuple(chunk.contiguous() for chunk in tensor_list)

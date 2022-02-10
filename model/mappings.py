@@ -2,7 +2,7 @@ import torch
 from .initialize import get_tensor_model_parallel_rank, get_tensor_model_parallel_group
 from .utils import split_tensor_along_last_dim, divide
 
-def _split(input_, kernel_size=0, conv=False):
+def _split(input_, kernel_size=0, padding=0, conv=False):
     """Split the tensor along its last dimension and keep the
     corresponding slice."""
 
@@ -83,12 +83,12 @@ def reduce_from_tensor_model_parallel_region(input_):
     return _ReduceFromModelParallelRegion.apply(input_)
 
 
-def scatter_to_tensor_model_parallel_region(input_, kernel_size=0, conv=False):
-    return _ScatterToModelParallelRegion.apply(input_, kernel_size, conv)
+def scatter_to_tensor_model_parallel_region(input_, kernel_size=0, padding=0, conv=False):
+    return _ScatterToModelParallelRegion.apply(input_, kernel_size, padding, conv)
 
 
-def gather_from_tensor_model_parallel_region(input_, kernel_size=0, conv=False):
-    return _GatherFromModelParallelRegion.apply(input_, kernel_size, conv)
+def gather_from_tensor_model_parallel_region(input_, kernel_size=0, padding=0, conv=False):
+    return _GatherFromModelParallelRegion.apply(input_, kernel_size, padding, conv)
 
 
 def copy_to_tensor_model_parallel_region(input_):
@@ -116,12 +116,12 @@ class _ScatterToModelParallelRegion(torch.autograd.Function):
     """Split the input and keep only the corresponding chuck to the rank."""
 
     @staticmethod
-    def symbolic(graph, input_, kernel_size, conv):
-        return _split(input_, kernel_size, conv)
+    def symbolic(graph, input_, kernel_size, padding, conv):
+        return _split(input_, kernel_size, padding, conv)
 
     @staticmethod
-    def forward(ctx, input_, kernel_size, conv):
-        return _split(input_, kernel_size, conv)
+    def forward(ctx, input_, kernel_size, padding, conv):
+        return _split(input_, kernel_size, padding, conv)
 
     @staticmethod
     def backward(ctx, grad_output):

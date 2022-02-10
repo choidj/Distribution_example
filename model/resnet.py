@@ -46,7 +46,7 @@ class ParallelBottleNeck(Bottleneck):
 
 class ParallelConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size,  stride=1,
-                 padding=0, dilation=1, groups=1, last_cnn=False, bias=True, **kwargs):
+                 padding=0, dilation=1, groups=1, bias=True, **kwargs):
         super(ParallelConv2d, self).__init__(in_channels, out_channels, kernel_size, stride,
                  padding, dilation, groups, bias, device=torch.cuda.current_device(), **kwargs)
         self.ngpus_per_node = torch.cuda.device_count()
@@ -59,10 +59,8 @@ class ParallelConv2d(nn.Conv2d):
                             parallel_weight, bias, self.stride,
                             _pair(0), self.dilation, self.groups)
         else:
-            padded_input_ = F.pad(input, self._reversed_padding_repeated_twice)
-            splited_input = scatter_to_tensor_model_parallel_region(padded_input_, self.kernel_size, True)
-            splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride,
-                        self.padding, self.dilation, self.groups)
+            splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size, True)
+            splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride, self.dilation, self.groups)
         output = gather_from_tensor_model_parallel_region(splited_output, self.kernel_size, True)
 
         return output
