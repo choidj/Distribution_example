@@ -54,12 +54,12 @@ class ParallelConv2d(nn.Conv2d):
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
         parallel_weight = copy_to_tensor_model_parallel_region(weight)
         if self.padding_mode != 'zeros':
-            splited_input = scatter_to_tensor_model_parallel_region(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode), self.kernel_size, True)
+            splited_input = scatter_to_tensor_model_parallel_region(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode), self.kernel_size, padding=self.padding, conv=True)
             splited_output = F.conv2d(splited_input,
                             parallel_weight, bias, self.stride,
                             _pair(0), self.dilation, self.groups)
         else:
-            splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size, True)
+            splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size, self.padding, True)
             splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride, self.dilation, self.groups)
         output = gather_from_tensor_model_parallel_region(splited_output, self.kernel_size, padding=0, conv=True)
 
