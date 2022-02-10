@@ -19,7 +19,7 @@ def _split(input_, kernel_size=0, conv=False):
     input_list = split_tensor_along_last_dim(input_, world_size, kernel_size, conv)
     if rank == 0:
         for i in range(world_size):
-            print("[Master GPU] **TO SPLIT** [ {} ] Output : ".format(str(i)), input_list[i][0][0][0])
+            print("[Master GPU] **TO SPLIT** [ {} ] Output : ".format(str), input_list[i][0][0][0])
     # Note: torch.split does not create contiguous tensors by default.
     output = input_list[rank].contiguous() # 새로운 주소로 할당함.
     
@@ -45,9 +45,9 @@ def _gather(input_, kernel_size=0, conv=False):
 
     print("[Rank {} GPU] **TO GATHER** previous Input : Index (0, 0, 0, ) -> ".format(str(rank)), input_[0][0][0])
 
-    if conv and rank != (world_size-1):
-        input_ = input_[:, :, :, :-result_kernel_size].contiguous()
-        print("[Rank {} GPU] **TO GATHER** next Input Splited Size : {}".format(str(rank), str(input_.size())))
+    # if conv and rank != (world_size-1):
+    #     input_ = input_[:, :, :, :-result_kernel_size].contiguous()
+    #     print("[Rank {} GPU] **TO GATHER** next Input Splited Size : {}".format(str(rank), str(input_.size())))
     
     print("[Rank {} GPU] **TO GATHER** next Input : Index (0, 0, 0, ) -> ".format(str(rank)), input_[0][0][0])
     tensor_list = [torch.empty_like(input_) for _ in range(world_size)]
