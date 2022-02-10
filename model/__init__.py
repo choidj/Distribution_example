@@ -3,5 +3,14 @@ from .mappings import gather_from_tensor_model_parallel_region
 from .mappings import reduce_from_tensor_model_parallel_region
 from .mappings import scatter_to_tensor_model_parallel_region
 
+
+
+from .initialize import destroy_model_parallel
+from .initialize import get_tensor_model_parallel_group
+from .initialize import get_tensor_model_parallel_rank
+from .initialize import get_tensor_model_parallel_world_size
+from .initialize import initialize_model_parallel
+
+
 from .utils import divide
 from .utils import split_tensor_along_last_dim
