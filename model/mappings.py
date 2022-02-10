@@ -16,7 +16,7 @@ def _split(input_, kernel_size=0, padding=0, conv=False):
     # Split along last dimension.
     # if rank == 0:
         # print("[Master GPU] **TO SPLIT** Input Size : {}, Input : ".format(str(input_.size()), input_[0][0][0]))
-    input_list = split_tensor_along_last_dim(input_, world_size, kernel_size, conv)
+    input_list = split_tensor_along_last_dim(input_, world_size, kernel_size, padding, conv)
     # if rank == 0:
     #     for i in range(world_size):
     #         print("[Master GPU] **TO SPLIT** [ {} ] Output : ".format(str(i)), input_list[i][0][0][0])

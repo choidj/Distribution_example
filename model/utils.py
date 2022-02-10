@@ -67,13 +67,12 @@ def split_tensor_along_last_dim(tensor, num_partitions,
                                  in memory.
     """
     rank = get_tensor_model_parallel_rank()
-    world = get_tensor_model_parallel_world_size()
     
     pad = ()
 
     if rank == 0:
         pad = (padding, 0, padding, padding)
-    elif rank == world - 1:
+    elif rank == num_partitions - 1:
         pad = (0, padding, padding, padding)
     else:
         pad = (0, 0, padding, padding)
@@ -94,7 +93,7 @@ def split_tensor_along_last_dim(tensor, num_partitions,
         for i, t in enumerate(padded_tensor):
             print("[Master GPU] **TO SPLIT** Splited Input[{}] : ".format(str(i)), t[0][0][0])
     
-    if conv and rank != world - 1:
+    if conv and rank != num_partitions - 1:
         tensor_custom_split = torch.cat([padded_tensor, tensor[:, :, :, ((rank+1)*last_dim_size):((rank+1)*last_dim_size)+kernel_size[0]-1]], dim=last_dim)
         tensor_list[rank] = tensor_custom_split
         if rank == 0:
