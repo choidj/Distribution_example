@@ -97,7 +97,6 @@ def split_tensor_along_last_dim(tensor, num_partitions,
         
         tensor_list = list(tensor_list)
         tensor_list[rank] = tensor_custom_split
-        tensor_list = tuple(tensor_list)
 
         if rank == 0:
             for i, t in enumerate(tensor_list):
@@ -108,4 +107,6 @@ def split_tensor_along_last_dim(tensor, num_partitions,
     if contiguous_split_chunks:
         return tuple(chunk.contiguous() for chunk in tensor_list)
 
+    tensor_list = tuple(tensor_list)
+    
     return tensor_list
