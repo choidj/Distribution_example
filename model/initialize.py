@@ -17,7 +17,6 @@
 
 import torch
 
-from .utils import ensure_divisibility
 
 _TENSOR_MODEL_PARALLEL_GROUP = None
 
