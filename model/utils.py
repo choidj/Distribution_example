@@ -69,7 +69,7 @@ def split_tensor_along_last_dim(tensor, num_partitions,
     rank = get_tensor_model_parallel_rank()
     
     pad = ()
-    
+    print(padding[0])
     if rank == 0:
         pad = (padding[0], 0, padding[0], padding[0])
     elif rank == num_partitions - 1:
