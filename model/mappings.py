@@ -27,7 +27,7 @@ def _split(input_, kernel_size=0, padding=0, conv=False):
     return output
 
 
-def _gather(input_, kernel_size=0, conv=False):
+def _gather(input_, kernel_size=0, padding=0, conv=False):
     """Gather tensors and concatinate along the last dimension."""
     
     world_size = torch.distributed.get_world_size()
