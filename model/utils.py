@@ -68,14 +68,14 @@ def split_tensor_along_last_dim(tensor, num_partitions,
     """
     rank = get_tensor_model_parallel_rank()
     
-    pad = ()
+    pad_dim = ()
 
     if rank == 0:
-        pad = (padding[0], 0, padding[0], padding[0])
+        pad_dim = (padding[0], 0, padding[0], padding[0])
     elif rank == num_partitions - 1:
-        pad = (0, padding[0], padding[0], padding[0])
+        pad_dim = (0, padding[0], padding[0], padding[0])
     else:
-        pad = (0, 0, padding[0], padding[0])
+        pad_dim = (0, 0, padding[0], padding[0])
 
     # Get the size and dimension.
     last_dim = tensor.dim() - 1
@@ -99,7 +99,7 @@ def split_tensor_along_last_dim(tensor, num_partitions,
             for i, t in enumerate(tensor_list):
                 print("[Master GPU] **TO CUSTOM SPLIT** Splited Input[{}] : ".format(str(i)), t[0][0][0])
 
-    tensor_list[rank] = F.pad(tensor_list[rank], pad)
+    tensor_list[rank] = F.pad(tensor_list[rank], pad_dim)
     # Note: torch.split does not create contiguous tensors by default.
     if contiguous_split_chunks:
         return tuple(chunk.contiguous() for chunk in tensor_list)
