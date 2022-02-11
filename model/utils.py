@@ -91,21 +91,9 @@ def split_tensor_along_last_dim(tensor, num_partitions,
     
     if conv:
         tensor_list = list(tensor_list)
-        if rank == 0:
-            pad_dim = (padding_int, 0, padding_int, padding_int)
-            tensor_custom_split = torch.cat([tensor_list[rank], tensor_list[rank+1][:, :, :, :padding_int]], dim=last_dim)
-            paded_tensor = F.pad(tensor_custom_split, pad_dim) # effectively zero padding, 
-        elif rank == num_partitions - 1:
-            pad_dim = (0, padding_int, padding_int, padding_int)
-            tensor_custom_split = torch.cat([tensor_list[rank-1][:, :, :, -padding_int:], tensor_list[rank]], dim=last_dim)
-            paded_tensor = F.pad(tensor_custom_split, pad_dim) # effectively zero padding, 
-        else:
-            pad_dim = (0, 0, padding_int, padding_int)
-            tensor_custom_split = torch.cat([tensor_list[rank-1][:, :, :, -padding_int:], tensor_list[rank]], dim=last_dim)
-            tensor_custom_split = torch.cat([tensor_custom_split, tensor_list[rank+1][:, :, :, :padding_int]], dim=last_dim)
-            paded_tensor = F.pad(tensor_custom_split, pad_dim) # effectively zero padding, 
+        padded_tensor = custom_pad(tensor_list, padding_int, last_dim, num_partitions))
             
-        tensor_list[rank] = paded_tensor
+        tensor_list[rank] = padded_tensor
         tensor_list = tuple(tensor_list)
 
         if rank == 0:
@@ -118,3 +106,22 @@ def split_tensor_along_last_dim(tensor, num_partitions,
 
 
     return tensor_list
+
+
+
+def custom_pad(tensor, padding, apply_dim, num_partitions):
+    rank = get_tensor_model_parallel_rank()
+    
+    if rank == 0:
+        pad_dim = (padding, 0, padding, padding)
+        tensor_custom_split = torch.cat([tensor[rank], tensor[rank+1][:, :, :, :padding]], dim=apply_dim)
+        return F.pad(tensor_custom_split, pad_dim) 
+    elif rank == num_partitions - 1:
+        pad_dim = (0, padding, padding, padding)
+        tensor_custom_split = torch.cat([tensor[rank-1][:, :, :, -padding:], tensor[rank]], dim=apply_dim)
+        return F.pad(tensor_custom_split, pad_dim) 
+    else:
+        pad_dim = (0, 0, padding, padding)
+        tensor_custom_split = torch.cat([tensor[rank-1][:, :, :, -padding:], tensor[rank]], dim=apply_dim)
+        tensor_custom_split = torch.cat([tensor_custom_split, tensor[rank+1][:, :, :, :padding]], dim=apply_dim)
+        return F.pad(tensor_custom_split, pad_dim)
