@@ -39,15 +39,7 @@ def _gather(input_, kernel_size=0, padding=0, conv=False):
     last_dim = input_.dim() - 1
     rank = get_tensor_model_parallel_rank()
     
-    print("[Rank {} GPU] **TO GATHER** Input Size : {}".format(str(rank), str(input_.size())))
-
-    result_kernel_size = divide(kernel_size[0] - 1, 2)
-
     print("[Rank {} GPU] **TO GATHER** previous Input : Index (0, 0, 0, ) -> ".format(str(rank)), input_[0][0][0])
-
-    if conv and rank != (world_size-1):
-        input_ = input_[:, :, :, :-result_kernel_size].contiguous()
-        print("[Rank {} GPU] **TO GATHER** next Input Splited Size : {}".format(str(rank), str(input_.size())))
     
     print("[Rank {} GPU] **TO GATHER** next Input : Index (0, 0, 0, ) -> ".format(str(rank)), input_[0][0][0])
     tensor_list = [torch.empty_like(input_) for _ in range(world_size)]
