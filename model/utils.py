@@ -68,14 +68,10 @@ def split_tensor_along_last_dim(tensor, num_partitions,
     """
     rank = get_tensor_model_parallel_rank()
     
+    padding_int = padding[0]
     pad_dim = ()
 
-    if rank == 0:
-        pad_dim = (padding[0], 0, padding[0], padding[0])
-    elif rank == num_partitions - 1:
-        pad_dim = (0, padding[0], padding[0], padding[0])
-    else:
-        pad_dim = (0, 0, padding[0], padding[0])
+
 
     # Get the size and dimension.
     last_dim = tensor.dim() - 1
@@ -86,25 +82,39 @@ def split_tensor_along_last_dim(tensor, num_partitions,
     
     # Split.
     tensor_list = torch.split(tensor, last_dim_size, dim=last_dim)
-    tensor_list = list(tensor_list)
+    
+
 
     if rank == 0:
         for i, t in enumerate(tensor_list):
             print("[Master GPU] **TO SPLIT** Splited Input[{}] : ".format(str(i)), t[0][0][0])
     
-    if conv and rank != num_partitions - 1:
-        tensor_custom_split = torch.cat([tensor_list[rank], tensor_list[rank+1][:, :, :, :kernel_size[0]-1]], dim=last_dim)
-        tensor_list[rank] = tensor_custom_split
+    if conv:
+        tensor_list = list(tensor_list)
+        if rank == 0:
+            pad_dim = (padding_int, 0, padding_int, padding_int)
+            tensor_custom_split = torch.cat([tensor_list[rank], tensor_list[rank+1][:, :, :, :padding_int]], dim=last_dim)
+            paded_tensor = F.pad(tensor_custom_split, pad_dim) # effectively zero padding, 
+        elif rank == num_partitions - 1:
+            pad_dim = (0, padding_int, padding_int, padding_int)
+            tensor_custom_split = torch.cat([tensor_list[rank-1][:, :, :, -padding_int:], tensor_list[rank]], dim=last_dim)
+            paded_tensor = F.pad(tensor_custom_split, pad_dim) # effectively zero padding, 
+        else:
+            pad_dim = (0, 0, padding_int, padding_int)
+            tensor_custom_split = torch.cat([tensor_list[rank-1][:, :, :, -padding_int:], tensor_list[rank]], dim=last_dim)
+            tensor_custom_split = torch.cat([tensor_custom_split, tensor_list[rank+1][:, :, :, :padding_int]], dim=last_dim)
+            paded_tensor = F.pad(tensor_custom_split, pad_dim) # effectively zero padding, 
+            
+        tensor_list[rank] = paded_tensor
+        tensor_list = tuple(tensor_list)
 
         if rank == 0:
             for i, t in enumerate(tensor_list):
                 print("[Master GPU] **TO CUSTOM SPLIT** Splited Input[{}] : ".format(str(i)), t[0][0][0])
 
-    tensor_list[rank] = F.pad(tensor_list[rank], pad_dim)
     # Note: torch.split does not create contiguous tensors by default.
     if contiguous_split_chunks:
         return tuple(chunk.contiguous() for chunk in tensor_list)
 
-    tensor_list = tuple(tensor_list)
 
     return tensor_list
