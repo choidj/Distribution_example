@@ -12,15 +12,21 @@ def _split(input_, kernel_size=0, padding=0, conv=False):
         return input_
     rank = get_tensor_model_parallel_rank()
     if not __debug__:
-        if rank == 0:
+        if rank == 0 and conv:
+            print("[Master GPU] **TO SPLIT** Input Size : {}, Input : ".format(str(input_.size()), input_[0][0][padding[0]]))
+        else:
             print("[Master GPU] **TO SPLIT** Input Size : {}, Input : ".format(str(input_.size()), input_[0][0][0]))
+
     input_list = split_tensor_along_last_dim(input_, world_size, kernel_size, padding, conv)
     
     if not __debug__:
-        if rank == 0:
+        if rank == 0 and conv:
+            for i in range(world_size):
+                print("[Master GPU] **TO SPLIT** [ {} ] Output : ".format(str(i)), input_list[i][0][0][padding[0]])
+        else:
             for i in range(world_size):
                 print("[Master GPU] **TO SPLIT** [ {} ] Output : ".format(str(i)), input_list[i][0][0][0])
-    
+
     # Note: torch.split does not create contiguous tensors by default.
     output = input_list[rank].contiguous() # 새로운 주소로 할당함.
     if not __debug__:
@@ -41,8 +47,12 @@ def _gather(input_, kernel_size=0, padding=0, conv=False):
     rank = get_tensor_model_parallel_rank()
     
     if not __debug__:
-        print("[Rank {} GPU] **TO GATHER** Input Size -> ".format(str(rank)), input_.size())
-        print("[Rank {} GPU] **TO GATHER** Input (0, 0, 0, ) -> ".format(str(rank)), input_[0][0][0])
+        if rank == 0 and conv:
+            print("[Rank {} GPU] **TO GATHER** Input Size -> ".format(str(rank)), input_.size())
+            print("[Rank {} GPU] **TO GATHER** Input (0, 0, 0, ) -> ".format(str(rank)), input_[0][0][padding[0]])
+        else:
+            print("[Rank {} GPU] **TO GATHER** Input Size -> ".format(str(rank)), input_.size())
+            print("[Rank {} GPU] **TO GATHER** Input (0, 0, 0, ) -> ".format(str(rank)), input_[0][0][0])
     
     tensor_list = [torch.empty_like(input_) for _ in range(world_size)]
     tensor_list[rank] = input_
