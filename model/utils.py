@@ -88,7 +88,7 @@ def split_tensor_along_last_dim(tensor, num_partitions,
         tensor_list = tuple(tensor_list)
 
     if not __debug__:
-        print("[Rank {} GPU] Division size : {}, **TO CUSTOM SPLIT** Splited Input[{}] : ".format(str(last_dim_size), str(rank)), tensor_list[rank].size())
+        print("[Rank {} GPU] Division size : {}, **TO CUSTOM SPLIT** Splited Input Size : ".format(str(last_dim_size), str(rank)), tensor_list[rank].size())
 
     # Note: torch.split does not create contiguous tensors by default.
     if contiguous_split_chunks:
