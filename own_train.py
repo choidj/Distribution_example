@@ -383,7 +383,7 @@ def accuracy(output, target, topk=(1,)):
 
 
 if __name__ == '__main__':
-    if __debug__:
-        print("------------------------------------Debug Mode On---------------------------------------")
-        print("----------If you don't want debug mode, give the option -O to python command------------")
+    if not __debug__:
+        print("-----------------------------------------Debug Mode On----------------------------------------")
+        print("----------If you don't want debug mode, don't give the option -O in python command------------")
     main()

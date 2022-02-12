@@ -11,20 +11,19 @@ def _split(input_, kernel_size=0, padding=0, conv=False):
     if world_size==1:
         return input_
     rank = get_tensor_model_parallel_rank()
-    if __debug__:
-        print("[Rank {} GPU] **TO SPLIT** Input Size : {}".format(str(rank), str(input_.size())))
+    if not __debug__:
         if rank == 0:
             print("[Master GPU] **TO SPLIT** Input Size : {}, Input : ".format(str(input_.size()), input_[0][0][0]))
     input_list = split_tensor_along_last_dim(input_, world_size, kernel_size, padding, conv)
     
-    if __debug__:
+    if not __debug__:
         if rank == 0:
             for i in range(world_size):
                 print("[Master GPU] **TO SPLIT** [ {} ] Output : ".format(str(i)), input_list[i][0][0][0])
     
     # Note: torch.split does not create contiguous tensors by default.
     output = input_list[rank].contiguous() # 새로운 주소로 할당함.
-    if __debug__:
+    if not __debug__:
         print("[Rank {} GPU] **SPLITED** Output Size : {}".format(str(rank), str(output.size())))
 
     return output
@@ -41,7 +40,7 @@ def _gather(input_, kernel_size=0, padding=0, conv=False):
     last_dim = input_.dim() - 1
     rank = get_tensor_model_parallel_rank()
     
-    if __debug__:
+    if not __debug__:
         print("[Rank {} GPU] **TO GATHER** Input Size -> ".format(str(rank)), input_.size())
         print("[Rank {} GPU] **TO GATHER** Input (0, 0, 0, ) -> ".format(str(rank)), input_[0][0][0])
     
@@ -55,7 +54,7 @@ def _gather(input_, kernel_size=0, padding=0, conv=False):
 
     # Note: torch.cat already creates a contiguous tensor.
     output = torch.cat(tensor_list, dim=last_dim).contiguous()
-    if __debug__:
+    if not __debug__:
         print("[Rank {} GPU] **GATHERED** Output Size : {}".format(str(rank), str(output.size())))
         if rank == 0:
             print("[Master GPU] **GATHERED** Output (0, 0, 0, ): ", output[0][0][0])
