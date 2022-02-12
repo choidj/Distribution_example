@@ -3,7 +3,7 @@ import torch.nn as nn
 from torchvision.models.resnet import ResNet, Bottleneck
 
 from .mappings import gather_from_tensor_model_parallel_region, copy_to_tensor_model_parallel_region, scatter_to_tensor_model_parallel_region
-from .initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_world_size
+from .initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_rank, get_tensor_model_parallel_world_size
 from .utils import divide
 import torch.nn.init as init
 from torch import Tensor
@@ -241,6 +241,49 @@ class OwnParallelResnet(ResNet):
         self.fc = ColumnParallelLinear(512 * ParallelBottleNeck.expansion, num_classes)
 
         # 여기서 결과를 all_gather로 합쳐서, columnparallel 고.
+
+    def _forward_impl(self, x: Tensor) -> Tensor:
+        rank = get_tensor_model_parallel_rank()
+        # See note [TorchScript super()]
+        x = self.conv1(x)
+        if rank == 0 and not __debug__:
+            print("[Master GPU] **self.conv1** Output size : ", x.size())
+        x = self.bn1(x)
+        if rank == 0 and not __debug__:
+            print("[Master GPU] **self.bn1** Output size : ", x.size())
+        x = self.relu(x)
+        if rank == 0 and not __debug__:
+            print("[Master GPU] **self.relu** Output size : ", x.size())
+        x = self.maxpool(x)
+        if rank == 0 and not __debug__:
+            print("[Master GPU] **self.maxpool** Output size : ", x.size())
+        x = self.layer1(x)
+        if rank == 0 and not __debug__:
+            print("[Master GPU] **self.layer1** Output size : ", x.size())
+        x = self.layer2(x)
+        if rank == 0 and not __debug__:
+            print("[Master GPU] **self.layer2** Output size : ", x.size())
+        x = self.layer3(x)
+        if rank == 0 and not __debug__:
+            print("[Master GPU] **self.layer3** Output size : ", x.size())
+        x = self.layer4(x)
+        if rank == 0 and not __debug__:
+            print("[Master GPU] **self.layer4** Output size : ", x.size())
+        x = self.avgpool(x)
+        if rank == 0 and not __debug__:
+            print("[Master GPU] **self.avgpool** Output size : ", x.size())
+        x = torch.flatten(x, 1)
+        if rank == 0 and not __debug__:
+            print("[Master GPU] **self.flatten** Output size : ", x.size())
+        x = self.fc(x)
+        if rank == 0 and not __debug__:
+            print("[Master GPU] **self.fc** Output size : ", x.size())
+
+
+        return x
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self._forward_impl(x)
 
 
     
