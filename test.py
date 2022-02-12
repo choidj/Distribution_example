@@ -3,18 +3,11 @@ import torch.multiprocessing as mp
 from model.resnet import ParallelConv2d
 from model.initialize import initialize_model_parallel
 import torch.distributed as dist
-from pypreprocessor import pypreprocessor
 
-pypreprocessor.parse()
-
-#define DEBUG_MODE
 
 def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
-    
+
     if rank == 0:
-        #ifdef DEBUG_MODE
-        print("__DEBUG MODE__")
-        #endif
         torch.set_printoptions(profile="full")
         start = torch.cuda.Event(enable_timing=True) 
         end = torch.cuda.Event(enable_timing=True) 
@@ -27,46 +20,51 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
     torch.cuda.synchronize()
     input_ = input_data.cuda(rank)
     parallel_conv_ = parallel_conv.cuda(rank)
+    serial_result_time = 0
+    parallel_result_time = 0
+
     if rank == 0:
         start.record()
         serial_conv_ = serial_conv.cuda(rank)
         serial_result = serial_conv_(input_)
         end.record()
-        print(start.elapsed_time(end))
-        print("[ Master Rank ] Serial Result : Index ( 0, 0, 0, 0 ~ 30) ", serial_result[0][0][0][:])
+        serial_result_time = start.elapsed_time(end)
+ 
+        
         #for p in serial_conv.parameters():
             #print("serial weight :",  p)
    
         start.record()
     parallel_result = parallel_conv_(input_)
     if rank == 0:
-        print("[ Master Rank ] Parallel Result : Index ( 0, 0, 0, 0 ~ 30) ", parallel_result[0][0][0][:])
         end.record()
 
-        print(start.elapsed_time(end))
+        parallel_result_time = start.elapsed_time(end)
 
     if rank == 0:
-        print("[ Master Rank  : {} ]".format(str(torch.cuda.current_device())))
-        print("[ Master Rank ] Parallel Result Shape : ", parallel_result.size())
-        print("[ Master Rank ] Serial Result Shape : ", serial_result.size())
-        print("[ Master Rank ] Parallel : ", parallel_result)
-        print("[ Master Rank ] Serial : ", serial_result)
-
-        # for a in range(serial_result.size()[0]):
-        #     for b in range(serial_result.size()[1]):
-        #         for c in range(serial_result.size()[2]):
-        #             for d in range(serial_result.size()[3]):
-        #                 if not torch.allclose(serial_result[a][b][c][d], parallel_result[a][b][c][d]):
-        #                     print("[ Master Rank ] Result is not the same : Index ( {}, {}, {}, {}), Serial {}, Parallel {}".format(a, b, c, d, serial_result[a][b][c][d], parallel_result[a][b][c][d]))
+        if not __debug__:
+            print("[ Master Rank  : {} ]".format(str(torch.cuda.current_device())))
+            print("[ Master Rank ] Parallel Result Shape : ", parallel_result.size())
+            print("[ Master Rank ] Parallel : ", parallel_result[0][0][0])
+            print("[ Master Rank ] Serial Result Shape : ", serial_result.size())
+            print("[ Master Rank ] Serial : ", serial_result[0][0][0])
 
         # parallel_result and serial_result should be the same
         assert torch.allclose(parallel_result, serial_result), "Parallel and Serial results are not the same"
-        print("Conv layer Test Passed!!")
+        print("Parallel and Serial Result are same.")
+        print("***Conv layer Test Passed!!***")
+        print("Serial elapsed time : ", serial_result_time, " ms")
+        print("Parallel elapsed time : ", parallel_result_time, " ms")
 
 
 
 
 def main():
+
+    if __debug__:
+        print("__SIMPLE DEBUG MODE__")
+    else:
+        print("__HARD DEBUG MODE__")
     # 한 노드의 GPU수를 가져옴.
     ngpus_per_node = torch.cuda.device_count()
     input_data = torch.randn(1, 3, 224, 224)
