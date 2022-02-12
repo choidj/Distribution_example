@@ -80,7 +80,7 @@ def split_tensor_along_last_dim(tensor, num_partitions,
     tensor_list = torch.split(tensor, last_dim_size, dim=last_dim)
     
     
-    if conv:
+    if conv and padding_int != 0:
         tensor_list = list(tensor_list)
         padded_tensor = custom_pad(tensor_list, padding_int, last_dim, num_partitions)
             
