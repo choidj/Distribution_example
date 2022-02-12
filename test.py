@@ -54,7 +54,7 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
         #                     print("[ Master Rank ] Result is not the same : Index ( {}, {}, {}, {}), Serial {}, Parallel {}".format(a, b, c, d, serial_result[a][b][c][d], parallel_result[a][b][c][d]))
 
         # parallel_result and serial_result should be the same
-        # assert torch.allclose(parallel_result, serial_result), "Parallel and Serial results are not the same"
+        assert torch.allclose(parallel_result, serial_result), "Parallel and Serial results are not the same"
         print("Conv layer Test Passed!!")
 
 
