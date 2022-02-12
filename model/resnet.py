@@ -246,39 +246,38 @@ class OwnParallelResnet(ResNet):
         rank = get_tensor_model_parallel_rank()
         # See note [TorchScript super()]
         x = self.conv1(x)
-        if rank == 0 and not __debug__:
-            print("[Master GPU] **self.conv1** Output size : ", x.size())
+        if not __debug__:
+            print("[Rank {} GPU] **self.conv1** Output size : ".format(str(rank)), x.size())
         x = self.bn1(x)
-        if rank == 0 and not __debug__:
-            print("[Master GPU] **self.bn1** Output size : ", x.size())
+        if not __debug__:
+            print("[Rank {} GPU] **self.bn1** Output size : ".format(str(rank)), x.size())
         x = self.relu(x)
-        if rank == 0 and not __debug__:
-            print("[Master GPU] **self.relu** Output size : ", x.size())
+        if not __debug__:
+            print("[Rank {} GPU] **self.relu** Output size : ".format(str(rank)), x.size())
         x = self.maxpool(x)
-        if rank == 0 and not __debug__:
-            print("[Master GPU] **self.maxpool** Output size : ", x.size())
+        if not __debug__:
+            print("[Rank {} GPU] **self.maxpool** Output size : ".format(str(rank)), x.size())
         x = self.layer1(x)
-        if rank == 0 and not __debug__:
-            print("[Master GPU] **self.layer1** Output size : ", x.size())
+        if not __debug__:
+            print("[Rank {} GPU] **self.layer1** Output size : ".format(str(rank)), x.size())
         x = self.layer2(x)
-        if rank == 0 and not __debug__:
-            print("[Master GPU] **self.layer2** Output size : ", x.size())
+        if not __debug__:
+            print("[Rank {} GPU] **self.layer2** Output size : ".format(str(rank)), x.size())
         x = self.layer3(x)
-        if rank == 0 and not __debug__:
-            print("[Master GPU] **self.layer3** Output size : ", x.size())
+        if not __debug__:
+            print("[Rank {} GPU] **self.layer3** Output size : ".format(str(rank)), x.size())
         x = self.layer4(x)
-        if rank == 0 and not __debug__:
-            print("[Master GPU] **self.layer4** Output size : ", x.size())
+        if not __debug__:
+            print("[Rank {} GPU] **self.layer4** Output size : ".format(str(rank)), x.size())
         x = self.avgpool(x)
-        if rank == 0 and not __debug__:
-            print("[Master GPU] **self.avgpool** Output size : ", x.size())
+        if not __debug__:
+            print("[Rank {} GPU] **self.avgpool** Output size : ".format(str(rank)), x.size())
         x = torch.flatten(x, 1)
-        if rank == 0 and not __debug__:
-            print("[Master GPU] **self.flatten** Output size : ", x.size())
+        if not __debug__:
+            print("[Rank {} GPU] **self.flatten** Output size : ".format(str(rank)), x.size())
         x = self.fc(x)
-        if rank == 0 and not __debug__:
-            print("[Master GPU] **self.fc** Output size : ", x.size())
-
+        if not __debug__:
+            print("[Rank {} GPU] **self.fc** Output size : ".format(str(rank)), x.size())
 
         return x
 
