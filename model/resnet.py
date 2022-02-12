@@ -233,7 +233,7 @@ class OwnParallelResnet(ResNet):
             ParallelBottleNeck, [3, 4, 23, 3], num_classes=num_classes, *args, **kwargs)
         
  
-        self.conv1 = ParallelConv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
+        self.conv1 = ParallelConv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
