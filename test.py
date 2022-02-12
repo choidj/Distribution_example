@@ -3,7 +3,7 @@ import torch.multiprocessing as mp
 from model.resnet import ParallelConv2d
 from model.initialize import initialize_model_parallel
 import torch.distributed as dist
-from pypreprocessor import preprocessor
+from pypreprocessor import pypreprocessor
 
 pypreprocessor.parse()
 
