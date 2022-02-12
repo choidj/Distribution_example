@@ -386,4 +386,8 @@ if __name__ == '__main__':
     if not __debug__:
         print("-----------------------------------------Debug Mode On----------------------------------------")
         print("----------If you don't want debug mode, don't give the option -O in python command------------")
+    else:
+        print("-----------------------------------------Debug Mode Off---------------------------------------")
+        print("----------If you want debug mode, give the option -O in python command------------------------")
+
     main()
