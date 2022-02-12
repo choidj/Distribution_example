@@ -238,6 +238,7 @@ class OwnParallelResnet(ResNet):
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        
         self.fc = ColumnParallelLinear(512 * ParallelBottleNeck.expansion, num_classes)
 
         # 여기서 결과를 all_gather로 합쳐서, columnparallel 고.
