@@ -14,7 +14,7 @@ def _split(input_, kernel_size=0, padding=0, conv=False):
     if not __debug__:
         if rank == 0 and conv:
             print("[Master GPU] **TO SPLIT** Input Size : {}, Input : ".format(str(input_.size()), input_[0][0][padding[0]]))
-        else:
+        elif rank == 0 and not conv:
             print("[Master GPU] **TO SPLIT** Input Size : {}, Input : ".format(str(input_.size()), input_[0][0][0]))
 
     input_list = split_tensor_along_last_dim(input_, world_size, kernel_size, padding, conv)
@@ -23,7 +23,7 @@ def _split(input_, kernel_size=0, padding=0, conv=False):
         if rank == 0 and conv:
             for i in range(world_size):
                 print("[Master GPU] **TO SPLIT** [ {} ] Output : ".format(str(i)), input_list[i][0][0][padding[0]])
-        else:
+        elif rank == 0 and not conv:
             for i in range(world_size):
                 print("[Master GPU] **TO SPLIT** [ {} ] Output : ".format(str(i)), input_list[i][0][0][0])
 
@@ -50,7 +50,7 @@ def _gather(input_, kernel_size=0, padding=0, conv=False):
         if rank == 0 and conv:
             print("[Rank {} GPU] **TO GATHER** Input Size -> ".format(str(rank)), input_.size())
             print("[Rank {} GPU] **TO GATHER** Input (0, 0, 0, ) -> ".format(str(rank)), input_[0][0][padding[0]])
-        else:
+        elif rank == 0 and not conv:
             print("[Rank {} GPU] **TO GATHER** Input Size -> ".format(str(rank)), input_.size())
             print("[Rank {} GPU] **TO GATHER** Input (0, 0, 0, ) -> ".format(str(rank)), input_[0][0][0])
     
