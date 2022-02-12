@@ -89,7 +89,7 @@ def split_tensor_along_last_dim(tensor, num_partitions,
     
     if conv:
         tensor_list = list(tensor_list)
-        padded_tensor = custom_pad(tensor_list, padding_int, last_dim, num_partitions))
+        padded_tensor = custom_pad(tensor_list, padding_int, last_dim, num_partitions)
             
         tensor_list[rank] = padded_tensor
         tensor_list = tuple(tensor_list)
