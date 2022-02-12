@@ -28,8 +28,9 @@ def initialize_model_parallel():
     Arguments:
         self.tensor_model_parallel_size: number of GPUs used for tensor model parallelism. Now we only support 4 GPUs.
     """
-    if torch.distributed.get_rank() == 0:
-        print('> initializing parallel work')
+    if not __debug__:
+        if torch.distributed.get_rank() == 0:
+            print('> initializing parallel work')
 
     # Get world size and rank. Ensure some consistencies.
     assert torch.distributed.is_initialized()
