@@ -53,8 +53,8 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
         assert torch.allclose(parallel_result, serial_result), "Parallel and Serial results are not the same"
         print("Parallel and Serial Result are same.")
         print("***Conv layer Test Passed!!***")
-        print("Serial elapsed time : {.2f} ms".format(serial_result_time))
-        print("Parallel elapsed time : {.2f} ms".format(parallel_result_time))
+        print("Serial elapsed time : {:.2f} ms".format(serial_result_time))
+        print("Parallel elapsed time : {:.2f} ms".format(parallel_result_time))
 
 
 
