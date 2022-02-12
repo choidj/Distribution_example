@@ -112,7 +112,7 @@ def main_worker(gpu, ngpus_per_node, args):
     initialize_model_parallel()
     # resnet model 생성.
     model = OwnParallelResnet(100)
-
+    
     # model = ParallelResnet()
     # model = PipelineResnet()
     # model = DataParallelResnet()
@@ -383,8 +383,6 @@ def accuracy(output, target, topk=(1,)):
 
 
 if __name__ == '__main__':
+    if __debug__:
+        print("----------Debug Mode On------------")
     main()
-
-
-        
-         
