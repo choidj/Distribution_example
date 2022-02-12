@@ -3,16 +3,22 @@ import torch.multiprocessing as mp
 from model.resnet import ParallelConv2d
 from model.initialize import initialize_model_parallel
 import torch.distributed as dist
+from pypreprocessor import preprocessor
 
+pypreprocessor.parse()
 
+#define DEBUG_MODE
 
 def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
     
     if rank == 0:
+        #ifdef DEBUG_MODE
+        print("__DEBUG MODE__")
+        #endif
         torch.set_printoptions(profile="full")
         start = torch.cuda.Event(enable_timing=True) 
         end = torch.cuda.Event(enable_timing=True) 
-    
+        
     dist.init_process_group(backend="nccl", init_method="tcp://127.0.0.1:6006", world_size=ngpus_per_node, rank=rank)
     initialize_model_parallel()
     #for p in parallel_conv.parameters():
@@ -43,9 +49,9 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
         print("[ Master Rank  : {} ]".format(str(torch.cuda.current_device())))
         print("[ Master Rank ] Parallel Result Shape : ", parallel_result.size())
         print("[ Master Rank ] Serial Result Shape : ", serial_result.size())
-        # print("[ Master Rank ] Parallel : ", parallel_result)
-        # print("[ Master Rank ] Serial : ", serial_result)
-        
+        print("[ Master Rank ] Parallel : ", parallel_result)
+        print("[ Master Rank ] Serial : ", serial_result)
+
         # for a in range(serial_result.size()[0]):
         #     for b in range(serial_result.size()[1]):
         #         for c in range(serial_result.size()[2]):
@@ -71,7 +77,7 @@ def main():
                                 bias=False)
     parallel_conv.weight = serial_conv.weight
 
-    print("Are they same? : ", torch.allclose(serial_conv.weight, parallel_conv.weight))
+    print("Are they same? (Serial Weight and Parallel Weight) : ", torch.allclose(serial_conv.weight, parallel_conv.weight))
 
     mp.spawn(test_conv, nprocs=ngpus_per_node, args=(ngpus_per_node, serial_conv, parallel_conv, input_data,))
 
