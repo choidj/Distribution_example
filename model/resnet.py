@@ -39,6 +39,7 @@ class ParallelBottleNeck(Bottleneck):
         self.conv3 = conv1x1(self.planes, self.expansion * self.planes)
 
 
+
 class WidthParallelConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size,  stride=1,
                  padding=0, dilation=1, groups=1, bias=True, **kwargs):
@@ -59,6 +60,7 @@ class WidthParallelConv2d(nn.Conv2d):
         output = gather_from_tensor_model_parallel_region(splited_output, self.kernel_size, self.padding, conv=True)
 
         return output
+
 
 
 class WeightParallelConv2d(nn._ConvNd):
@@ -96,6 +98,9 @@ class WeightParallelConv2d(nn._ConvNd):
                 self.register_parameter('bias', None)
 
                 self.reset_parameters()
+
+    
+
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
         if self.padding_mode != 'zeros':
             output =  F.conv2d(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
@@ -112,6 +117,7 @@ class WeightParallelConv2d(nn._ConvNd):
         
     def forward(self, input: Tensor) -> Tensor:
         return self._conv_forward(input, self.weight, self.bias)
+
 
 
 class ChannelParallelConv2d(nn._ConvNd):
@@ -149,20 +155,23 @@ class ChannelParallelConv2d(nn._ConvNd):
                 self.register_parameter('bias', None)
 
                 self.reset_parameters()
+
+
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
+        parallel_weight = copy_to_tensor_model_parallel_region(weight)
         if self.padding_mode != 'zeros':
-            output =  F.conv2d(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
-                            weight, bias, self.stride,
+            splited_input = scatter_to_tensor_model_parallel_region(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode), self.kernel_size, padding=self.padding, conv=True)
+            splited_output = F.conv2d(splited_input,
+                            parallel_weight, bias, self.stride,
                             _pair(0), self.dilation, self.groups)
+        else:
+            splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size, self.padding, True)
+            splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride, _pair(0), self.dilation, self.groups)
+        output = reduce_from_tensor_model_parallel_region(splited_output)
 
-            output = reduce_from_tensor_model_parallel_region(output)
-            return output
-
-        output = F.conv2d(input, weight, bias, self.stride,
-                        self.padding, self.dilation, self.groups)
-        output = reduce_from_tensor_model_parallel_region(output)
         return output
         
+
     def forward(self, input: Tensor) -> Tensor:
         return self._conv_forward(input, self.weight, self.bias)
 
@@ -170,12 +179,11 @@ class ChannelParallelConv2d(nn._ConvNd):
 
 def conv3x3(in_planes: int, out_planes: int, block: Type[Union[WidthParallelConv2d, WeightParallelConv2d, ChannelParallelConv2d]],stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
     """3x3 convolution with padding"""
-    return block(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=dilation, groups=groups, bias=False, dilation=dilation)
+    return block(in_planes, out_planes, kernel_size=3, stride=stride, padding=dilation, groups=groups, bias=False, dilation=dilation)
 
 
 
-def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv2d:
+def conv1x1(in_planes: int, out_planes: int, block: Type[Union[WidthParallelConv2d, WeightParallelConv2d, ChannelParallelConv2d]], stride: int = 1) -> nn.Conv2d:
     """1x1 convolution"""
     return block(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
@@ -237,7 +245,6 @@ class ColumnParallelLinear(torch.nn.Linear):
             self.bias.zero_()
 
 
-
     def forward(self, input_):
         bias = self.bias if not self.skip_bias_add else None
 
@@ -257,7 +264,6 @@ class ColumnParallelLinear(torch.nn.Linear):
 
 
 
-
 # resnet 101 임.
 class OwnParallelResnet(ResNet):
     def __init__(self, num_classes, *args, **kwargs):
@@ -273,7 +279,6 @@ class OwnParallelResnet(ResNet):
         
         self.fc = ColumnParallelLinear(512 * ParallelBottleNeck.expansion, num_classes)
 
-        # 여기서 결과를 all_gather로 합쳐서, columnparallel 고.
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         rank = get_tensor_model_parallel_rank()
@@ -314,8 +319,6 @@ class OwnParallelResnet(ResNet):
 
         return x
 
+
     def forward(self, x: Tensor) -> Tensor:
         return self._forward_impl(x)
-
-
-    
