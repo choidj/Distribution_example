@@ -2,26 +2,21 @@ import torch
 import torch.nn as nn
 from torchvision.models.resnet import ResNet, Bottleneck
 
-from .mappings import gather_from_tensor_model_parallel_region, copy_to_tensor_model_parallel_region, scatter_to_tensor_model_parallel_region
+from torch.nn.common_types import _size_2_t
+from typing import Optional, Union
+
+from .mappings import gather_from_tensor_model_parallel_region, copy_to_tensor_model_parallel_region, scatter_to_tensor_model_parallel_region, reduce_from_tensor_model_parallel_region
 from .initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_rank, get_tensor_model_parallel_world_size
 from .utils import divide
 import torch.nn.init as init
 from torch import Tensor
 from torch.nn import functional as F
 from torch.nn.modules.utils import _pair
-from typing import Optional, Callable
+from typing import Type, Any, Callable, Union, List, Optional
 
 num_classes = 1000
  
-def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
-    """3x3 convolution with padding"""
-    return ParallelConv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=dilation, groups=groups, bias=False, dilation=dilation)
 
-
-def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv2d:
-    """1x1 convolution"""
-    return ParallelConv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
 
 class ParallelBottleNeck(Bottleneck):
@@ -44,10 +39,10 @@ class ParallelBottleNeck(Bottleneck):
         self.conv3 = conv1x1(self.planes, self.expansion * self.planes)
 
 
-class ParallelConv2d(nn.Conv2d):
+class WidthParallelConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size,  stride=1,
                  padding=0, dilation=1, groups=1, bias=True, **kwargs):
-        super(ParallelConv2d, self).__init__(in_channels, out_channels, kernel_size, stride,
+        super(WidthParallelConv2d, self).__init__(in_channels, out_channels, kernel_size, stride,
                  padding, dilation, groups, bias, device=torch.cuda.current_device(), **kwargs)
         self.ngpus_per_node = torch.cuda.device_count()
         
@@ -65,6 +60,124 @@ class ParallelConv2d(nn.Conv2d):
 
         return output
 
+
+class WeightParallelConv2d(nn._ConvNd):
+    def __init__(
+            self,
+            in_channels: int,
+            out_channels: int,
+            kernel_size: _size_2_t,
+            stride: _size_2_t = 1,
+            padding: Union[str, _size_2_t] = 0,
+            dilation: _size_2_t = 1,
+            groups: int = 1,
+            bias: bool = True,
+            padding_mode: str = 'zeros',  # TODO: refine this type
+            device=None,
+            dtype=None
+        ) -> None:
+            factory_kwargs = {'device': device, 'dtype': dtype}
+            kernel_size_ = _pair(kernel_size)
+            stride_ = _pair(stride)
+            padding_ = padding if isinstance(padding, str) else _pair(padding)
+            dilation_ = _pair(dilation)
+            super(WeightParallelConv2d, self).__init__(
+                in_channels, out_channels, kernel_size_, stride_, padding_, dilation_,
+                        False, _pair(0), groups, bias, padding_mode, **factory_kwargs)
+            if self.transposed:
+                    self.weight = nn.Parameter(torch.empty(
+                        (in_channels, out_channels // groups, *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
+            else:
+                self.weight = nn.Parameter(torch.empty(
+                    (out_channels, in_channels // groups, *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
+            if bias:
+                self.bias = nn.Parameter(torch.empty(out_channels, device=torch.cuda.current_device(), **factory_kwargs))
+            else:
+                self.register_parameter('bias', None)
+
+                self.reset_parameters()
+    def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
+        if self.padding_mode != 'zeros':
+            output =  F.conv2d(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
+                            weight, bias, self.stride,
+                            _pair(0), self.dilation, self.groups)
+
+            output = gather_from_tensor_model_parallel_region(output, self.kernel_size, self.padding, conv=True)
+            return output
+
+        output = F.conv2d(input, weight, bias, self.stride,
+                        self.padding, self.dilation, self.groups)
+        output = gather_from_tensor_model_parallel_region(output, self.kernel_size, self.padding, conv=True)
+        return output
+        
+    def forward(self, input: Tensor) -> Tensor:
+        return self._conv_forward(input, self.weight, self.bias)
+
+
+class ChannelParallelConv2d(nn._ConvNd):
+    def __init__(
+            self,
+            in_channels: int,
+            out_channels: int,
+            kernel_size: _size_2_t,
+            stride: _size_2_t = 1,
+            padding: Union[str, _size_2_t] = 0,
+            dilation: _size_2_t = 1,
+            groups: int = 1,
+            bias: bool = True,
+            padding_mode: str = 'zeros',  # TODO: refine this type
+            device=None,
+            dtype=None
+        ) -> None:
+            factory_kwargs = {'device': device, 'dtype': dtype}
+            kernel_size_ = _pair(kernel_size)
+            stride_ = _pair(stride)
+            padding_ = padding if isinstance(padding, str) else _pair(padding)
+            dilation_ = _pair(dilation)
+            super(ChannelParallelConv2d, self).__init__(
+                in_channels, out_channels, kernel_size_, stride_, padding_, dilation_,
+                        False, _pair(0), groups, bias, padding_mode, **factory_kwargs)
+            if self.transposed:
+                    self.weight = nn.Parameter(torch.empty(
+                        (in_channels // groups, out_channels, *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
+            else:
+                self.weight = nn.Parameter(torch.empty(
+                    (out_channels // groups, in_channels, *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
+            if bias:
+                self.bias = nn.Parameter(torch.empty(out_channels, device=torch.cuda.current_device(), **factory_kwargs))
+            else:
+                self.register_parameter('bias', None)
+
+                self.reset_parameters()
+    def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
+        if self.padding_mode != 'zeros':
+            output =  F.conv2d(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
+                            weight, bias, self.stride,
+                            _pair(0), self.dilation, self.groups)
+
+            output = reduce_from_tensor_model_parallel_region(output)
+            return output
+
+        output = F.conv2d(input, weight, bias, self.stride,
+                        self.padding, self.dilation, self.groups)
+        output = reduce_from_tensor_model_parallel_region(output)
+        return output
+        
+    def forward(self, input: Tensor) -> Tensor:
+        return self._conv_forward(input, self.weight, self.bias)
+
+
+
+def conv3x3(in_planes: int, out_planes: int, block: Type[Union[WidthParallelConv2d, WeightParallelConv2d, ChannelParallelConv2d]],stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
+    """3x3 convolution with padding"""
+    return block(in_planes, out_planes, kernel_size=3, stride=stride,
+                     padding=dilation, groups=groups, bias=False, dilation=dilation)
+
+
+
+def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv2d:
+    """1x1 convolution"""
+    return block(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
 
 
@@ -143,88 +256,7 @@ class ColumnParallelLinear(torch.nn.Linear):
         return output, output_bias
 
 
-class ParallelResnet(ResNet):
-    def __init__(self, dev0, dev1, *args, **kwargs):
-        super(ParallelResnet, self).__init__(
-            Bottleneck, [3, 4, 23, 3], num_classes=num_classes, *args, **kwargs)
-        # dev0 and dev1 each point to a GPU device (usually gpu:0 and gpu:1)
-        self.dev0 = dev0
-        self.dev1 = dev1
- 
-        # splits the model in two consecutive sequences : seq0 and seq1 
-        self.seq0 = nn.Sequential(
-            self.conv1,
-            self.bn1,
-            self.relu,
-            self.maxpool,
-            self.layer1,
-            self.layer2
-        ).to(self.dev0)  # sends the first sequence of the model to the first GPU
- 
-        self.seq1 = nn.Sequential(
-            self.layer3,
-            self.layer4,
-            self.avgpool,
-        ).to(self.dev1)  # sends the second sequence of the model to the second GPU
- 
-        self.fc.to(self.dev1)  # last layer is on the third, fourth GPU
- 
-    def forward(self, x):
-        x= self.seq0(x)     # apply first sequence of the model on input x
-        x= x.to(self.dev1)  # send the intermediary result to the second GPU
-        x = self.seq1(x)    # apply second sequence of the model to x
-        return self.fc(x.view(x.size(0), -1))  
 
-
-class PipelinedResnet(ResNet):
-    def __init__(self, dev0, dev1, split_size=8, *args, **kwargs):
-        super(PipelinedResnet, self).__init__(
-            Bottleneck, [3, 4, 23, 3], num_classes=num_classes, *args, **kwargs)
-        # dev0 and dev1 each point to a GPU device (usually gpu:0 and gpu:1)
-        self.dev0 = dev0
-        self.dev1 = dev1
-        self.split_size = split_size
- 
-        # splits the model in two consecutive sequences : seq0 and seq1 
-        self.seq0 = nn.Sequential(
-            self.conv1,
-            self.bn1,
-            self.relu,
-            self.maxpool,
-            self.layer1,
-            self.layer2
-        ).to(self.dev0)  # sends the first sequence of the model to the first GPU
- 
-        self.seq1 = nn.Sequential(
-            self.layer3,
-            self.layer4,
-            self.avgpool,
-        ).to(self.dev1)  # sends the second sequence of the model to the second GPU
- 
-        self.fc.to(self.dev1)  # last layer is on the second GPU
- 
-    def forward(self, x):
-        # split setup for x, containing a batch of (image, label) as a tensor
-        splits = iter(x.split(self.split_size, dim=0))
-        s_next = next(splits)
-        # initialisation: 
-        # - first mini batch goes through seq0 (on dev0)
-        # - the output is sent to dev1
-        s_prev = self.seq0(s_next).to(self.dev1)
-        ret = []
- 
-        for s_next in splits:
-            # A. s_prev runs on dev1
-            s_prev = self.seq1(s_prev)
-            ret.append(self.fc(s_prev.view(s_prev.size(0), -1)))
- 
-            # B. s_next runs on dev0, which can run concurrently with A
-            s_prev = self.seq0(s_next).to(self.dev1)
- 
-        s_prev = self.seq1(s_prev)
-        ret.append(self.fc(s_prev.view(s_prev.size(0), -1)))
- 
-        return torch.cat(ret)
 
 # resnet 101 임.
 class OwnParallelResnet(ResNet):
@@ -233,7 +265,7 @@ class OwnParallelResnet(ResNet):
             ParallelBottleNeck, [3, 4, 23, 3], num_classes=num_classes, *args, **kwargs)
         
  
-        self.conv1 = ParallelConv2d(3, 64, kernel_size=7, stride=2, padding=3,
+        self.conv1 = WidthParallelConv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
