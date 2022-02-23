@@ -23,7 +23,7 @@ def test_conv(rank, ngpus_per_node, serial_conv, input_data):
 
     parallel_conv = WeightParallelConv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                 bias=False)
-    parallel_conv.weight = serial_conv.weight[32*rank:32*(rank+1), :, :, :]
+    parallel_conv.weight = torch.nn.Parameter(serial_conv.weight[32*rank:32*(rank+1), :, :, :])
     parallel_conv_ = parallel_conv.cuda(rank)
 
     serial_result_time = 0
