@@ -15,29 +15,19 @@ from torch.nn import functional as F
 from torch.nn.modules.utils import _pair
 from typing import Type, Any, Callable, Union, List, Optional
 
+import math
+
 num_classes = 1000
  
 
 
+class ParallelType(Enum):
+    """Type of parallelism."""
+    NoneParallel = 0
+    HybridParallel = 1
+    WeightParallel = 2
 
-class ParallelBottleNeck(Bottleneck):
-    def __init__(self,
-        inplanes: int,
-        planes: int,
-        stride: int = 1,
-        downsample: Optional[nn.Module] = None,
-        groups: int = 1,
-        base_width: int = 64,
-        dilation: int = 1,
-        norm_layer: Optional[Callable[..., nn.Module]] = None,
-        **kwargs):
-        super(ParallelBottleNeck, self).__init__(inplanes, planes, stride, downsample, groups, base_width, dilation, norm_layer, **kwargs)
-        self.inplanes = inplanes
-        self.planes = planes
-        
-        self.conv1 = conv1x1(self.inplanes, self.planes, stride)
-        self.conv2 = conv3x3(self.planes, self.planes, groups, dilation)
-        self.conv3 = conv1x1(self.planes, self.expansion * self.planes)
+
 
 
 
@@ -98,8 +88,15 @@ class WeightParallelConv2d(nn._ConvNd):
             else:
                 self.register_parameter('bias', None)
 
-                self.reset_parameters()
+            self.reset_parameters()
 
+
+    def reset_parameters(self) -> None:
+        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
+            bound = 1 / math.sqrt(fan_in)
+            init.uniform_(self.bias, -bound, bound)
     
 
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
@@ -155,7 +152,7 @@ class ChannelParallelConv2d(nn._ConvNd):
             else:
                 self.register_parameter('bias', None)
 
-                self.reset_parameters()
+            self.reset_parameters()
 
 
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
@@ -173,12 +170,20 @@ class ChannelParallelConv2d(nn._ConvNd):
         return output
 
 
+    def reset_parameters(self) -> None:
+        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
+            bound = 1 / math.sqrt(fan_in)
+            init.uniform_(self.bias, -bound, bound)
+
+
     def forward(self, input: Tensor) -> Tensor:
         return self._conv_forward(input, self.weight, self.bias)
 
 
 
-def conv3x3(in_planes: int, out_planes: int, block: Type[Union[WidthParallelConv2d, WeightParallelConv2d, ChannelParallelConv2d]],stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
+def conv3x3(in_planes: int, out_planes: int, block: Type[Union[WidthParallelConv2d, WeightParallelConv2d, ChannelParallelConv2d, nn.Conv2d]],stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
     """3x3 convolution with padding"""
     return block(in_planes, out_planes, kernel_size=3, stride=stride, padding=dilation, groups=groups, bias=False, dilation=dilation)
 
@@ -187,6 +192,28 @@ def conv3x3(in_planes: int, out_planes: int, block: Type[Union[WidthParallelConv
 def conv1x1(in_planes: int, out_planes: int, block: Type[Union[WidthParallelConv2d, WeightParallelConv2d, ChannelParallelConv2d]], stride: int = 1) -> nn.Conv2d:
     """1x1 convolution"""
     return block(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+
+
+class ParallelBottleNeck(Bottleneck):
+    def __init__(self,
+        inplanes: int,
+        planes: int,
+        conv: Type[Union[WidthParallelConv2d, WeightParallelConv2d, ChannelParallelConv2d]] = nn.Conv2d,
+        stride: int = 1,
+        downsample: Optional[nn.Module] = None,
+        groups: int = 1,
+        base_width: int = 64,
+        dilation: int = 1,
+        norm_layer: Optional[Callable[..., nn.Module]] = None,
+        **kwargs):
+        super(ParallelBottleNeck, self).__init__(inplanes, planes, stride, downsample, groups, base_width, dilation, norm_layer, **kwargs)
+        self.inplanes = inplanes
+        self.planes = planes
+
+        self.conv1 = conv1x1(self.inplanes, self.planes, conv, stride)
+        self.conv2 = conv3x3(self.planes, self.planes, conv, groups, dilation)
+        self.conv3 = conv1x1(self.planes, self.expansion * self.planes, conv)
+
 
 
 
@@ -265,11 +292,6 @@ class ColumnParallelLinear(torch.nn.Linear):
 
 
 
-class ParallelType(Enum):
-    """Type of parallelism."""
-    NoneParallel = 0
-    HybridParallel = 1
-    WeightParallel = 2
     
 
 
@@ -278,7 +300,6 @@ class OwnParallelResnet(nn.Module):
     def __init__(
             self,
             type: ParallelType = ParallelType.HybridParallel,
-            block: Type[Union[BasicBlock, Bottleneck]] = ParallelBottleNeck,
             layers: List[int] = [3, 4, 23, 3],
             num_classes: int = 1000,
             zero_init_residual: bool = False,
@@ -287,7 +308,23 @@ class OwnParallelResnet(nn.Module):
             replace_stride_with_dilation: Optional[List[bool]] = None,
             norm_layer: Optional[Callable[..., nn.Module]] = None
         ) -> None:
-            super(ResNet, self).__init__()
+            super(OwnParallelResnet, self).__init__()
+            if type == ParallelType.NoneParallel:
+                block = BasicBlock
+                conv = nn.Conv2d
+                self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
+                                bias=False)
+            elif type == ParallelType.HybridParallel:
+                block = ParallelBottleNeck
+                conv = WidthParallelConv2d
+                self.conv1 = WidthParallelConv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
+                                bias=False)
+            else:
+                block = ParallelBottleNeck
+                conv = WeightParallelConv2d
+                self.conv1 = WeightParallelConv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
+                                bias=False)
+            
             if norm_layer is None:
                 norm_layer = nn.BatchNorm2d
             self._norm_layer = norm_layer
@@ -303,20 +340,23 @@ class OwnParallelResnet(nn.Module):
                                 "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
             self.groups = groups
             self.base_width = width_per_group
-            self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3,
-                                bias=False)
+
+            self.layer1 = self._make_layer(block, 64, conv, layers[0])
+            self.layer2 = self._make_layer(block, 128, conv, layers[1], stride=2,
+                                        dilate=replace_stride_with_dilation[0])
+            if type == ParallelType.HybridParallel:
+                conv = ChannelParallelConv2d
+            self.layer3 = self._make_layer(block, 256, conv, layers[2], stride=2,
+                                        dilate=replace_stride_with_dilation[1])
+            self.layer4 = self._make_layer(block, 512, conv, layers[3], stride=2,
+                                        dilate=replace_stride_with_dilation[2])
             self.bn1 = norm_layer(self.inplanes)
             self.relu = nn.ReLU(inplace=True)
             self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-            self.layer1 = self._make_layer(block, 64, layers[0])
-            self.layer2 = self._make_layer(block, 128, layers[1], stride=2,
-                                        dilate=replace_stride_with_dilation[0])
-            self.layer3 = self._make_layer(block, 256, layers[2], stride=2,
-                                        dilate=replace_stride_with_dilation[1])
-            self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
-                                        dilate=replace_stride_with_dilation[2])
+
+
             self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-            self.fc = nn.Linear(512 * block.expansion, num_classes)
+            self.fc = ColumnParallelLinear(512 * ParallelBottleNeck.expansion, num_classes)
 
             for m in self.modules():
                 if isinstance(m, nn.Conv2d):
@@ -335,7 +375,9 @@ class OwnParallelResnet(nn.Module):
                     elif isinstance(m, BasicBlock):
                         nn.init.constant_(m.bn2.weight, 0)  # type: ignore[arg-type]
 
-    def _make_layer(self, block: Type[Union[BasicBlock, Bottleneck]], planes: int, blocks: int,
+
+    def _make_layer(self, block: Type[Union[BasicBlock, Bottleneck]], planes: int, blocks: int, 
+                    conv: Type[Union[WidthParallelConv2d, ChannelParallelConv2d, WeightParallelConv2d]], 
                     stride: int = 1, dilate: bool = False) -> nn.Sequential:
         norm_layer = self._norm_layer
         downsample = None
@@ -345,35 +387,20 @@ class OwnParallelResnet(nn.Module):
             stride = 1
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                conv1x1(self.inplanes, planes * block.expansion, stride),
+                conv1x1(self.inplanes, planes * block.expansion, conv, stride),
                 norm_layer(planes * block.expansion),
             )
 
         layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample, self.groups,
+        layers.append(block(self.inplanes, planes, conv, stride, downsample, self.groups,
                             self.base_width, previous_dilation, norm_layer))
         self.inplanes = planes * block.expansion
         for _ in range(1, blocks):
-            layers.append(block(self.inplanes, planes, groups=self.groups,
+            layers.append(block(self.inplanes, planes, conv, groups=self.groups,
                                 base_width=self.base_width, dilation=self.dilation,
                                 norm_layer=norm_layer))
 
         return nn.Sequential(*layers)
-
-
-
-    def __init__(self, num_classes, *args, **kwargs):
-        super(OwnParallelResnet, self).__init__(
-            ParallelBottleNeck, [3, 4, 23, 3], num_classes=num_classes, *args, **kwargs)
-        
- 
-        self.conv1 = WidthParallelConv2d(3, 64, kernel_size=7, stride=2, padding=3,
-                               bias=False)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        
-        self.fc = ColumnParallelLinear(512 * ParallelBottleNeck.expansion, num_classes)
 
 
     def _forward_impl(self, x: Tensor) -> Tensor:
