@@ -280,6 +280,7 @@ class ColumnParallelLinear(torch.nn.Linear):
 
 
     def forward(self, input_):
+        bias = self.bias
 
         # Set up backprop all-reduce.
         input_parallel = copy_to_tensor_model_parallel_region(input_)
