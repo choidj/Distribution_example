@@ -441,7 +441,7 @@ class OwnParallelResnet(nn.Module):
             print("[Rank {} GPU] **self.flatten** Output size : ".format(str(rank)), x.size())
         x = self.fc(x)
         if not __debug__:
-            print("[Rank {} GPU] **self.fc** Output size : ".format(str(rank)), x.size())
+            print("[Rank {} GPU] **self.fc** Output : ".format(str(rank)), x)
 
         return x
 
