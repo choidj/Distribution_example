@@ -20,13 +20,16 @@ def test_conv(rank, ngpus_per_node, serial_conv, input_data):
     torch.cuda.set_device(rank)
     torch.cuda.synchronize()
     input_ = input_data.cuda(rank)
-    parallel_conv_ = parallel_conv.cuda(rank)
-    
-    serial_result_time = 0
-    parallel_result_time = 0
 
     parallel_conv = WeightParallelConv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                 bias=False)
+
+    parallel_conv_ = parallel_conv.cuda(rank)
+
+    serial_result_time = 0
+    parallel_result_time = 0
+
+
 
     print("Are they same? (Serial Weight and Parallel Weight) : ", torch.allclose(serial_conv.weight, parallel_conv.weight))
     if rank == 0:
