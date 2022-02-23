@@ -346,6 +346,7 @@ class OwnParallelResnet(nn.Module):
                                 "or a 3-element tuple, got {}".format(replace_stride_with_dilation))
             self.groups = groups
             self.base_width = width_per_group
+            self.bn1 = norm_layer(self.inplanes)
 
             self.layer1 = self._make_layer(block, 64, layers[0], conv)
             self.layer2 = self._make_layer(block, 128, layers[1], conv, stride=2,
@@ -356,7 +357,6 @@ class OwnParallelResnet(nn.Module):
                                         dilate=replace_stride_with_dilation[1])
             self.layer4 = self._make_layer(block, 512, layers[3], conv, stride=2,
                                         dilate=replace_stride_with_dilation[2])
-            self.bn1 = norm_layer(self.inplanes)
             self.relu = nn.ReLU(inplace=True)
             self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
