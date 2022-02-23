@@ -6,7 +6,7 @@ from enum import Enum
 from torch.nn.common_types import _size_2_t
 from typing import Optional, Union
 
-from .mappings import gather_from_tensor_model_parallel_region, copy_to_tensor_model_parallel_region, scatter_to_tensor_model_parallel_region, reduce_from_tensor_model_parallel_region
+from .mappings import gather_from_tensor_model_parallel_region, copy_to_tensor_model_parallel_region, scatter_to_tensor_model_parallel_region, reduce_from_tensor_model_parallel_region, gather_from_tensor_model_parallel_conv_region, gather_from_tensor_model_parallel_linear_region
 from .initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_rank, get_tensor_model_parallel_world_size
 from .utils import divide
 import torch.nn.init as init
@@ -107,12 +107,12 @@ class WeightParallelConv2d(nn.Conv2d):
                             weight, bias, self.stride,
                             _pair(0), self.dilation, self.groups)
 
-            output = gather_from_tensor_model_parallel_region(output)
+            output = gather_from_tensor_model_parallel_conv_region(output)
             return output
 
         output = F.conv2d(input, weight, bias, self.stride,
                         self.padding, self.dilation, self.groups)
-        output = gather_from_tensor_model_parallel_region(output)
+        output = gather_from_tensor_model_parallel_conv_region(output)
         return output
         
     def forward(self, input: Tensor) -> Tensor:
@@ -288,7 +288,7 @@ class ColumnParallelLinear(torch.nn.Linear):
         # Matrix multiply.
         output_parallel = F.linear(input_parallel, self.weight, bias)
 
-        output = gather_from_tensor_model_parallel_region(output_parallel)
+        output = gather_from_tensor_model_parallel_linear_region(output_parallel)
 
         return output
 

@@ -1,5 +1,5 @@
 import torch
-from .initialize import get_tensor_model_parallel_rank, get_tensor_model_parallel_group
+from .initialize import get_tensor_model_parallel_rank, get_tensor_model_parallel_group, get_tensor_model_parallel_world_size
 from .utils import split_tensor_along_last_dim, divide
 
 def _split(input_, kernel_size=0, padding=0, conv=False, ver="width"):
@@ -33,6 +33,67 @@ def _split(input_, kernel_size=0, padding=0, conv=False, ver="width"):
         print("[Rank {} GPU] **SPLITED** Output Size : {}".format(str(rank), str(output.size())))
 
     return output
+
+
+def _conv_split(input_):
+    """Split the tensor along its last dimension and keep the
+    corresponding slice."""
+    world_size = torch.distributed.get_world_size()
+
+    # Bypass the function if we are using only 1 GPU.
+    if world_size==1:
+        return input_
+    rank = get_tensor_model_parallel_rank()
+    num_partitions = get_tensor_model_parallel_world_size()
+
+    # Get the size and dimension.
+    channel_dim = 1
+    
+    channel_dim_size = divide(input_.size()[channel_dim], num_partitions)
+    
+    # Split.
+    tensor_list = torch.split(input_, channel_dim_size, dim=channel_dim)
+
+
+    # Note: torch.split does not create contiguous tensors by default.
+
+    input_list = tensor_list
+
+
+    # Note: torch.split does not create contiguous tensors by default.
+    output = input_list[rank].contiguous() # 새로운 주소로 할당함.
+
+
+    return output
+
+
+
+def _linear_split(input_):
+    """Split the tensor along its last dimension and keep the
+    corresponding slice."""
+
+    rank = get_tensor_model_parallel_rank()
+    num_partitions = get_tensor_model_parallel_world_size()
+
+    # Get the size and dimension.
+    last_dim = 1
+    
+    last_dim_size = divide(input_.size()[last_dim], num_partitions)
+    
+    # Split.
+    tensor_list = torch.split(input_,last_dim_size, dim=last_dim)
+
+
+    # Note: torch.split does not create contiguous tensors by default.
+
+    input_list = tensor_list
+
+
+    # Note: torch.split does not create contiguous tensors by default.
+    output = input_list[rank].contiguous() # 새로운 주소로 할당함.
+
+    return output
+
 
 
 def _gather(input_, kernel_size=0, padding=0, conv=False, ver="weight"):
@@ -74,6 +135,58 @@ def _gather(input_, kernel_size=0, padding=0, conv=False, ver="weight"):
     return output
 
 
+def _conv_gather(input_):
+    """Gather tensors and concatinate along the last dimension."""
+    world_size = torch.distributed.get_world_size()
+    # Bypass the function if we are using only 1 GPU.
+    if world_size==1:
+        return input_
+
+    # Size and dimension.
+    last_dim = input_.dim() - 1
+    rank = get_tensor_model_parallel_rank()
+    
+
+    tensor_list = [torch.empty_like(input_) for _ in range(world_size)]
+    tensor_list[rank] = input_
+
+
+    
+    torch.distributed.all_gather(tensor_list, input_, group=get_tensor_model_parallel_group())
+
+
+    # Note: torch.cat already creates a contiguous tensor.
+    output = torch.cat(tensor_list, dim=1).contiguous()
+    
+    return output
+
+
+def _linear_gather(input_):
+    """Gather tensors and concatinate along the last dimension."""
+    world_size = torch.distributed.get_world_size()
+    # Bypass the function if we are using only 1 GPU.
+    if world_size==1:
+        return input_
+
+    # Size and dimension.
+    last_dim = input_.dim() - 1
+    rank = get_tensor_model_parallel_rank()
+    
+
+    tensor_list = [torch.empty_like(input_) for _ in range(world_size)]
+    tensor_list[rank] = input_
+
+
+    
+    torch.distributed.all_gather(tensor_list, input_, group=get_tensor_model_parallel_group())
+
+
+    # Note: torch.cat already creates a contiguous tensor.
+    output = torch.cat(tensor_list, dim=last_dim).contiguous()
+
+    return output
+
+
 def _reduce(input_):
     """All-reduce the input tensor across model parallel group."""
 
@@ -98,6 +211,14 @@ def scatter_to_tensor_model_parallel_region(input_, kernel_size=0, padding=0, co
 
 def gather_from_tensor_model_parallel_region(input_):
     return _GatherFromModelParallelRegion.apply(input_)
+
+
+def gather_from_tensor_model_parallel_linear_region(input_):
+    return _GatherFromModelParallelLinearRegion.apply(input_)
+
+
+def gather_from_tensor_model_parallel_conv_region(input_):
+    return _GatherFromModelParallelConvRegion.apply(input_)
 
 
 def copy_to_tensor_model_parallel_region(input_):
@@ -149,6 +270,34 @@ class _GatherFromModelParallelRegion(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         return _split(grad_output)
+
+
+class _GatherFromModelParallelLinearRegion(torch.autograd.Function):
+    @staticmethod
+    def symbolic(graph, input_):
+        return _linear_gather(input_)
+    
+    @staticmethod
+    def forward(ctx, input_):
+        return _linear_gather(input_)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return _linear_split(grad_output)
+
+
+class _GatherFromModelParallelConvRegion(torch.autograd.Function):
+    @staticmethod
+    def symbolic(graph, input_):
+        return _conv_gather(input_)
+    
+    @staticmethod
+    def forward(ctx, input_):
+        return _conv_gather(input_)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return _conv_split(grad_output)
 
 
 class _CopyToModelParallelRegion(torch.autograd.Function):
