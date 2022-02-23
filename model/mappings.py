@@ -147,8 +147,8 @@ class _GatherFromModelParallelRegion(torch.autograd.Function):
         return _gather(input_, kernel_size, padding, conv, ver)
 
     @staticmethod
-    def backward(ctx, grad_output, kernel_size, conv, ver):
-        return _split(grad_output, kernel_size, conv, ver)
+    def backward(ctx, grad_output):
+        return _split(grad_output)
 
 
 class _CopyToModelParallelRegion(torch.autograd.Function):
