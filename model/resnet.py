@@ -76,13 +76,13 @@ class WeightParallelConv2d(nn.Conv2d):
             dilation_ = _pair(dilation)
             super(WeightParallelConv2d, self).__init__(
                 in_channels, out_channels, kernel_size_, stride_, padding_, dilation_,
-                        False, _pair(0), groups, bias, padding_mode, **factory_kwargs)
+                        False, _pair(0), groups, bias, padding_mode, None, None)
             if self.transposed:
                     self.weight = nn.Parameter(torch.empty(
-                        (in_channels, out_channels // groups, *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
+                        (in_channels, out_channels // get_tensor_model_parallel_world_size(), *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
             else:
                 self.weight = nn.Parameter(torch.empty(
-                    (out_channels, in_channels // groups, *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
+                    (out_channels, in_channels // get_tensor_model_parallel_world_size(), *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
             if bias:
                 self.bias = nn.Parameter(torch.empty(out_channels, device=torch.cuda.current_device(), **factory_kwargs))
             else:
@@ -143,10 +143,10 @@ class ChannelParallelConv2d(nn.Conv2d):
                         False, _pair(0), groups, bias, padding_mode, **factory_kwargs)
             if self.transposed:
                     self.weight = nn.Parameter(torch.empty(
-                        (in_channels // groups, out_channels, *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
+                        (in_channels // get_tensor_model_parallel_world_size(), out_channels, *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
             else:
                 self.weight = nn.Parameter(torch.empty(
-                    (out_channels // groups, in_channels, *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
+                    (out_channels // get_tensor_model_parallel_world_size(), in_channels, *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
             if bias:
                 self.bias = nn.Parameter(torch.empty(out_channels, device=torch.cuda.current_device(), **factory_kwargs))
             else:
@@ -183,7 +183,7 @@ class ChannelParallelConv2d(nn.Conv2d):
 
 
 
-def conv3x3(in_planes: int, out_planes: int, block: Type[Union[WidthParallelConv2d, WeightParallelConv2d, ChannelParallelConv2d, nn.Conv2d]],stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
+def conv3x3(in_planes: int, out_planes: int, block: Type[Union[WidthParallelConv2d, WeightParallelConv2d, ChannelParallelConv2d, nn.Conv2d]], stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
     """3x3 convolution with padding"""
     return block(in_planes, out_planes, kernel_size=3, stride=stride, padding=dilation, groups=groups, bias=False, dilation=dilation)
 
