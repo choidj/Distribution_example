@@ -30,8 +30,6 @@ def test_conv(rank, ngpus_per_node, serial_conv, input_data):
     parallel_result_time = 0
 
 
-
-    print("Are they same? (Serial Weight and Parallel Weight) : ", torch.allclose(serial_conv.weight, parallel_conv.weight))
     if rank == 0:
         start.record()
         serial_conv_ = serial_conv.cuda(rank)
