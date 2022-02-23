@@ -69,7 +69,7 @@ class WeightParallelConv2d(nn.Conv2d):
             device=None,
             dtype=None
         ) -> None:
-            factory_kwargs = {'device': device, 'dtype': dtype}
+            factory_kwargs = {'device': torch.cuda.current_device(), 'dtype': dtype}
             kernel_size_ = _pair(kernel_size)
             stride_ = _pair(stride)
             padding_ = padding if isinstance(padding, str) else _pair(padding)
@@ -81,12 +81,12 @@ class WeightParallelConv2d(nn.Conv2d):
             
             if self.transposed:
                     self.weight = nn.Parameter(torch.empty(
-                        (in_channels, out_channels // group, *kernel_size_), device=torch.cuda.current_device(), **factory_kwargs))
+                        (in_channels, out_channels // group, *kernel_size_), **factory_kwargs))
             else:
                 self.weight = nn.Parameter(torch.empty(
-                    (out_channels, in_channels // group, *kernel_size_), device=torch.cuda.current_device(), **factory_kwargs))
+                    (out_channels, in_channels // group, *kernel_size_), **factory_kwargs))
             if bias:
-                self.bias = nn.Parameter(torch.empty(out_channels, device=torch.cuda.current_device(), **factory_kwargs))
+                self.bias = nn.Parameter(torch.empty(out_channels, **factory_kwargs))
             else:
                 self.register_parameter('bias', None)
 
@@ -135,7 +135,7 @@ class ChannelParallelConv2d(nn.Conv2d):
             device=None,
             dtype=None
         ) -> None:
-            factory_kwargs = {'device': device, 'dtype': dtype}
+            factory_kwargs = {'device': torch.cuda.current_device(), 'dtype': dtype}
             kernel_size_ = _pair(kernel_size)
             stride_ = _pair(stride)
             padding_ = padding if isinstance(padding, str) else _pair(padding)
@@ -148,12 +148,12 @@ class ChannelParallelConv2d(nn.Conv2d):
             
             if self.transposed:
                     self.weight = nn.Parameter(torch.empty(
-                        (in_channels // group, out_channels, *kernel_size_), device=torch.cuda.current_device(), **factory_kwargs))
+                        (in_channels // group, out_channels, *kernel_size_), **factory_kwargs))
             else:
                 self.weight = nn.Parameter(torch.empty(
-                    (out_channels // group, in_channels, *kernel_size_), device=torch.cuda.current_device(), **factory_kwargs))
+                    (out_channels // group, in_channels, *kernel_size_), **factory_kwargs))
             if bias:
-                self.bias = nn.Parameter(torch.empty(out_channels, device=torch.cuda.current_device(), **factory_kwargs))
+                self.bias = nn.Parameter(torch.empty(out_channels, **factory_kwargs))
             else:
                 self.register_parameter('bias', None)
             if get_tensor_model_parallel_rank() == 0:
