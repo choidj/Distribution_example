@@ -76,7 +76,7 @@ class WeightParallelConv2d(nn.Conv2d):
             dilation_ = _pair(dilation)
             super(WeightParallelConv2d, self).__init__(
                 in_channels, out_channels, kernel_size_, stride_, padding_, dilation_,
-                        False, _pair(0), groups, bias, padding_mode, None, None)
+                        False, _pair(0), groups, bias, padding_mode)
             if self.transposed:
                     self.weight = nn.Parameter(torch.empty(
                         (in_channels, out_channels // get_tensor_model_parallel_world_size(), *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
