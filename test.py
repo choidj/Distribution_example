@@ -1,6 +1,6 @@
 import torch
 import torch.multiprocessing as mp
-from model.resnet import ParallelConv2d
+from model.resnet import  WeightParallelConv2d
 from model.initialize import initialize_model_parallel
 import torch.distributed as dist
 
@@ -71,7 +71,7 @@ def main():
     # multiprocessing_distributed 변수가 true라면, world_size를 총 GPU개수로 설정한 후에, 메인 워커를 실행함.
     serial_conv = torch.nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                 bias=False)
-    parallel_conv = ParallelConv2d(3, 64, kernel_size=7, stride=2, padding=3,
+    parallel_conv = WeightParallelConv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                 bias=False)
     parallel_conv.weight = serial_conv.weight
 
