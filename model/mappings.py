@@ -2,7 +2,7 @@ import torch
 from .initialize import get_tensor_model_parallel_rank, get_tensor_model_parallel_group
 from .utils import split_tensor_along_last_dim, divide
 
-def _split(input_, kernel_size=0, padding=0, conv=False, ver="weight"):
+def _split(input_, kernel_size=0, padding=0, conv=False, ver="width"):
     """Split the tensor along its last dimension and keep the
     corresponding slice."""
     world_size = torch.distributed.get_world_size()
@@ -144,11 +144,13 @@ class _GatherFromModelParallelRegion(torch.autograd.Function):
     
     @staticmethod
     def forward(ctx, input_, kernel_size, padding, conv, ver):
+        ctx.save_for_backward(kernel_size, padding, conv, ver)
         return _gather(input_, kernel_size, padding, conv, ver)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return _split(grad_output)
+        kernel_size, padding, conv, ver = ctx.saved_tensors
+        return _split(grad_output, kernel_size, padding, conv, ver)
 
 
 class _CopyToModelParallelRegion(torch.autograd.Function):
