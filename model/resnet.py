@@ -1,6 +1,6 @@
 from prometheus_client import Enum
 import torch
-import torch.nn as nn
+import torch.nn.* as nn
 from torchvision.models.resnet import ResNet, Bottleneck, BasicBlock
 from enum import Enum
 from torch.nn.common_types import _size_2_t
