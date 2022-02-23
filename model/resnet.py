@@ -107,12 +107,12 @@ class WeightParallelConv2d(nn.Conv2d):
                             weight, bias, self.stride,
                             _pair(0), self.dilation, self.groups)
 
-            output = gather_from_tensor_model_parallel_region(output, self.kernel_size, self.padding, conv=True)
+            output = gather_from_tensor_model_parallel_region(output, self.kernel_size, self.padding, conv=True, ver="weight")
             return output
 
         output = F.conv2d(input, weight, bias, self.stride,
                         self.padding, self.dilation, self.groups)
-        output = gather_from_tensor_model_parallel_region(output, self.kernel_size, self.padding, conv=True)
+        output = gather_from_tensor_model_parallel_region(output, self.kernel_size, self.padding, conv=True, ver="weight")
         return output
         
     def forward(self, input: Tensor) -> Tensor:
@@ -163,12 +163,12 @@ class ChannelParallelConv2d(nn.Conv2d):
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
         parallel_weight = copy_to_tensor_model_parallel_region(weight)
         if self.padding_mode != 'zeros':
-            splited_input = scatter_to_tensor_model_parallel_region(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode), self.kernel_size, padding=self.padding, conv=True)
+            splited_input = scatter_to_tensor_model_parallel_region(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode), self.kernel_size, padding=self.padding, conv=True, ver="channel")
             splited_output = F.conv2d(splited_input,
                             parallel_weight, bias, self.stride,
                             _pair(0), self.dilation, self.groups)
         else:
-            splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size, self.padding, True)
+            splited_input = scatter_to_tensor_model_parallel_region(input, self.kernel_size, self.padding, True, ver="channel")
             splited_output = F.conv2d(splited_input, parallel_weight, bias, self.stride, _pair(0), self.dilation, self.groups)
         output = reduce_from_tensor_model_parallel_region(splited_output)
 
