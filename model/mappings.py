@@ -35,7 +35,7 @@ def _split(input_, kernel_size=0, padding=0, conv=False, ver="width"):
     return output
 
 
-def _gather(input_, kernel_size=0, padding=0, conv=False):
+def _gather(input_, kernel_size=0, padding=0, conv=False, ver="width"):
     """Gather tensors and concatinate along the last dimension."""
     world_size = torch.distributed.get_world_size()
     # Bypass the function if we are using only 1 GPU.
@@ -63,7 +63,10 @@ def _gather(input_, kernel_size=0, padding=0, conv=False):
 
 
     # Note: torch.cat already creates a contiguous tensor.
-    output = torch.cat(tensor_list, dim=last_dim).contiguous()
+    if ver == "weight":
+        output = torch.cat(tensor_list, dim=1).contiguous()
+    else:
+        output = torch.cat(tensor_list, dim=last_dim).contiguous()
     if not __debug__:
         print("[Rank {} GPU] **GATHERED** Output Size : {}".format(str(rank), str(output.size())))
         if rank == 0:
@@ -94,8 +97,8 @@ def scatter_to_tensor_model_parallel_region(input_, kernel_size=0, padding=0, co
     return _ScatterToModelParallelRegion.apply(input_, kernel_size, padding, conv, ver)
 
 
-def gather_from_tensor_model_parallel_region(input_, kernel_size=0, padding=0, conv=False):
-    return _GatherFromModelParallelRegion.apply(input_, kernel_size, padding, conv)
+def gather_from_tensor_model_parallel_region(input_, kernel_size=0, padding=0, conv=False, ver="width"):
+    return _GatherFromModelParallelRegion.apply(input_, kernel_size, padding, conv, ver)
 
 
 def copy_to_tensor_model_parallel_region(input_):
@@ -137,16 +140,16 @@ class _ScatterToModelParallelRegion(torch.autograd.Function):
 
 class _GatherFromModelParallelRegion(torch.autograd.Function):
     @staticmethod
-    def symbolic(graph, input_, kernel_size, padding, conv):
-        return _gather(input_, kernel_size, padding, conv)
+    def symbolic(graph, input_, kernel_size, padding, conv, ver):
+        return _gather(input_, kernel_size, padding, conv, ver)
     
     @staticmethod
-    def forward(ctx, input_, kernel_size, padding, conv):
-        return _gather(input_, kernel_size, padding, conv)
+    def forward(ctx, input_, kernel_size, padding, conv, ver):
+        return _gather(input_, kernel_size, padding, conv, ver)
 
     @staticmethod
-    def backward(ctx, grad_output, kernel_size, conv):
-        return _split(grad_output, kernel_size, conv)
+    def backward(ctx, grad_output, kernel_size, conv, ver):
+        return _split(grad_output, kernel_size, conv, ver)
 
 
 class _CopyToModelParallelRegion(torch.autograd.Function):
