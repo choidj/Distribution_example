@@ -288,11 +288,8 @@ class ColumnParallelLinear(torch.nn.Linear):
         # Matrix multiply.
         output_parallel = F.linear(input_parallel, self.weight, bias)
 
-        if self.gather_output:
-            # All-gather across the partitions.
-            output = gather_from_tensor_model_parallel_region(output_parallel)
-        else:
-            output = output_parallel
+        output = gather_from_tensor_model_parallel_region(output_parallel)
+
         output_bias = self.bias
         return output, output_bias
 
