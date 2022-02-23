@@ -68,7 +68,7 @@ def _gather(input_, kernel_size=0, padding=0, conv=False, ver="width"):
         output = torch.cat(tensor_list, dim=last_dim).contiguous()
     if not __debug__:
         print("[Rank {} GPU] **GATHERED** Output Size : {}".format(str(rank), str(output.size())))
-        if rank == 0:
+        if rank == 0 and conv:
             print("[Master GPU] **GATHERED** Output (0, 0, 0, ): ", output[0][0][0])
     
     return output
