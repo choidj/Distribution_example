@@ -162,7 +162,7 @@ def main_worker(gpu, ngpus_per_node, args):
             transforms.Resize(256),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
-            normalize,159753
+            normalize,
         ])),
         batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
