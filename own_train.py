@@ -149,43 +149,27 @@ def main_worker(gpu, ngpus_per_node, args):
         ]))
 
     if args.distributed:
-        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, rank=0)
     else:
         train_sampler = None
-    if args.gpu == 0:
-        train_loader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
-            num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
-        val_loader = torch.utils.data.DataLoader(
-            datasets.ImageFolder(valdir, transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                normalize,159753
-            ])),
-            batch_size=args.batch_size, shuffle=False,
-            num_workers=args.workers, pin_memory=True)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
+        num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
-        if args.evaluate:
-            validate(val_loader, model, criterion, args)
-            return
+    val_loader = torch.utils.data.DataLoader(
+        datasets.ImageFolder(valdir, transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,159753
+        ])),
+        batch_size=args.batch_size, shuffle=False,
+        num_workers=args.workers, pin_memory=True)
 
-        do_train = train_loader is not None
-        do_valid = val_loader is not None
-        
-        # Need to broadcast num_tokens and num_type_tokens.
-        flags = torch.cuda.LongTensor(
-            [int(do_train), int(do_valid)])
-    else:
-        flags = torch.cuda.LongTensor([0, 0])
-
-    # Broadcast num tokens.
-    torch.distributed.broadcast(flags,
-                                get_tensor_model_parallel_rank(),       
-                                group=get_tensor_model_parallel_group())
-    args.do_train = flags[0].item()
-    args.do_valid = flags[1].item()
+    if args.evaluate:
+        validate(val_loader, model, criterion, args)
+        return
 
 
     for epoch in range(args.start_epoch, args.epochs):
