@@ -144,7 +144,7 @@ class ChannelParallelConv2d(nn.Conv2d):
                         False, _pair(0), groups, bias, padding_mode, **factory_kwargs)
 
             group = get_tensor_model_parallel_world_size()
-            print(group)
+            print(group[0])
             if self.transposed:
                     self.weight = nn.Parameter(torch.empty(
                         (in_channels // group, out_channels, *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
