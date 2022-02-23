@@ -347,14 +347,14 @@ class OwnParallelResnet(nn.Module):
             self.groups = groups
             self.base_width = width_per_group
 
-            self.layer1 = self._make_layer(block, 64, conv, layers[0])
-            self.layer2 = self._make_layer(block, 128, conv, layers[1], stride=2,
+            self.layer1 = self._make_layer(block, 64, layers[0], conv)
+            self.layer2 = self._make_layer(block, 128, layers[1], conv, stride=2,
                                         dilate=replace_stride_with_dilation[0])
             if type == ParallelType.HybridParallel:
                 conv = ChannelParallelConv2d
-            self.layer3 = self._make_layer(block, 256, conv, layers[2], stride=2,
+            self.layer3 = self._make_layer(block, 256, layers[2], conv, stride=2,
                                         dilate=replace_stride_with_dilation[1])
-            self.layer4 = self._make_layer(block, 512, conv, layers[3], stride=2,
+            self.layer4 = self._make_layer(block, 512, layers[3], conv, stride=2,
                                         dilate=replace_stride_with_dilation[2])
             self.bn1 = norm_layer(self.inplanes)
             self.relu = nn.ReLU(inplace=True)
