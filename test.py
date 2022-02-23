@@ -5,13 +5,14 @@ from model.initialize import initialize_model_parallel
 import torch.distributed as dist
 
 
-def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
+def test_conv(rank, ngpus_per_node, serial_conv, input_data):
 
     if rank == 0:
         torch.set_printoptions(profile="full")
         start = torch.cuda.Event(enable_timing=True) 
         end = torch.cuda.Event(enable_timing=True) 
-        
+    
+
     dist.init_process_group(backend="nccl", init_method="tcp://127.0.0.1:6006", world_size=ngpus_per_node, rank=rank)
     initialize_model_parallel()
     #for p in parallel_conv.parameters():
@@ -20,9 +21,14 @@ def test_conv(rank, ngpus_per_node, serial_conv, parallel_conv, input_data):
     torch.cuda.synchronize()
     input_ = input_data.cuda(rank)
     parallel_conv_ = parallel_conv.cuda(rank)
+    
     serial_result_time = 0
     parallel_result_time = 0
 
+    parallel_conv = WeightParallelConv2d(3, 64, kernel_size=7, stride=2, padding=3,
+                                bias=False)
+
+    print("Are they same? (Serial Weight and Parallel Weight) : ", torch.allclose(serial_conv.weight, parallel_conv.weight))
     if rank == 0:
         start.record()
         serial_conv_ = serial_conv.cuda(rank)
@@ -71,13 +77,9 @@ def main():
     # multiprocessing_distributed 변수가 true라면, world_size를 총 GPU개수로 설정한 후에, 메인 워커를 실행함.
     serial_conv = torch.nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                 bias=False)
-    parallel_conv = WeightParallelConv2d(3, 64, kernel_size=7, stride=2, padding=3,
-                                bias=False)
-    parallel_conv.weight = serial_conv.weight
 
-    print("Are they same? (Serial Weight and Parallel Weight) : ", torch.allclose(serial_conv.weight, parallel_conv.weight))
 
-    mp.spawn(test_conv, nprocs=ngpus_per_node, args=(ngpus_per_node, serial_conv, parallel_conv, input_data,))
+    mp.spawn(test_conv, nprocs=ngpus_per_node, args=(ngpus_per_node, serial_conv,  input_data,))
 
 
 
