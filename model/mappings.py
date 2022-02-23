@@ -2,7 +2,7 @@ import torch
 from .initialize import get_tensor_model_parallel_rank, get_tensor_model_parallel_group
 from .utils import split_tensor_along_last_dim, divide
 
-def _split(input_, kernel_size=0, padding=0, conv=False):
+def _split(input_, kernel_size=0, padding=0, conv=False, ver="width"):
     """Split the tensor along its last dimension and keep the
     corresponding slice."""
     world_size = torch.distributed.get_world_size()
@@ -17,7 +17,7 @@ def _split(input_, kernel_size=0, padding=0, conv=False):
         elif rank == 0 and not conv:
             print("[Master GPU] **TO SPLIT** Input Size : {}, Input : ".format(str(input_.size()), input_[0][0][0]))
 
-    input_list = split_tensor_along_last_dim(input_, world_size, kernel_size, padding, conv)
+    input_list = split_tensor_along_last_dim(input_, world_size, kernel_size, padding, conv, ver)
     
     if not __debug__:
         if rank == 0 and conv:
@@ -90,8 +90,8 @@ def reduce_from_tensor_model_parallel_region(input_):
     return _ReduceFromModelParallelRegion.apply(input_)
 
 
-def scatter_to_tensor_model_parallel_region(input_, kernel_size=0, padding=0, conv=False):
-    return _ScatterToModelParallelRegion.apply(input_, kernel_size, padding, conv)
+def scatter_to_tensor_model_parallel_region(input_, kernel_size=0, padding=0, conv=False, ver="width"):
+    return _ScatterToModelParallelRegion.apply(input_, kernel_size, padding, conv, ver)
 
 
 def gather_from_tensor_model_parallel_region(input_, kernel_size=0, padding=0, conv=False):
@@ -123,12 +123,12 @@ class _ScatterToModelParallelRegion(torch.autograd.Function):
     """Split the input and keep only the corresponding chuck to the rank."""
 
     @staticmethod
-    def symbolic(graph, input_, kernel_size, padding, conv):
-        return _split(input_, kernel_size, padding, conv)
+    def symbolic(graph, input_, kernel_size, padding, conv, ver):
+        return _split(input_, kernel_size, padding, conv, ver)
 
     @staticmethod
-    def forward(ctx, input_, kernel_size, padding, conv):
-        return _split(input_, kernel_size, padding, conv)
+    def forward(ctx, input_, kernel_size, padding, conv, ver):
+        return _split(input_, kernel_size, padding, conv, ver)
 
     @staticmethod
     def backward(ctx, grad_output):

@@ -151,9 +151,9 @@ class ChannelParallelConv2d(nn._ConvNd):
                 self.bias = nn.Parameter(torch.empty(out_channels, device=torch.cuda.current_device(), **factory_kwargs))
             else:
                 self.register_parameter('bias', None)
-
-            self.reset_parameters()
-
+            if get_tensor_model_parallel_rank() == 0:
+                self.reset_parameters()
+            torch.distributed.broadcast(self.weight, get_tensor_model_parallel_rank(), group=get_tensor_model_parallel_group())
 
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
         parallel_weight = copy_to_tensor_model_parallel_region(weight)
@@ -192,6 +192,7 @@ def conv3x3(in_planes: int, out_planes: int, block: Type[Union[WidthParallelConv
 def conv1x1(in_planes: int, out_planes: int, block: Type[Union[WidthParallelConv2d, WeightParallelConv2d, ChannelParallelConv2d]], stride: int = 1) -> nn.Conv2d:
     """1x1 convolution"""
     return block(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
+
 
 
 class ParallelBottleNeck(Bottleneck):
@@ -290,9 +291,6 @@ class ColumnParallelLinear(torch.nn.Linear):
         output_bias = self.bias if self.skip_bias_add else None
         return output, output_bias
 
-
-
-    
 
 
 # resnet 101 임.

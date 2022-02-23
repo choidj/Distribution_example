@@ -18,7 +18,7 @@ import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
-from model.initialize import initialize_model_parallel
+from model.initialize import initialize_model_parallel, get_tensor_model_parallel_rank, get_tensor_model_parallel_group
 
 from model.resnet import OwnParallelResnet
 
@@ -113,9 +113,6 @@ def main_worker(gpu, ngpus_per_node, args):
     # resnet model 생성.
     model = OwnParallelResnet(100)
     
-    # model = ParallelResnet()
-    # model = PipelineResnet()
-    # model = DataParallelResnet()
 
     if not torch.cuda.is_available():
         print('using CPU...')
@@ -127,10 +124,6 @@ def main_worker(gpu, ngpus_per_node, args):
             model.cuda(args.gpu)
             args.batch_size = int(args.batch_size / ngpus_per_node)
             args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        else:
-            model.cuda()
-            model = torch.nn.parallel.DistributedDataParallel(model)
     
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda(args.gpu)
@@ -159,24 +152,41 @@ def main_worker(gpu, ngpus_per_node, args):
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     else:
         train_sampler = None
+    if args.gpu == 0:
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
+            num_workers=args.workers, pin_memory=True, sampler=train_sampler)
 
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
-        num_workers=args.workers, pin_memory=True, sampler=train_sampler)
+        val_loader = torch.utils.data.DataLoader(
+            datasets.ImageFolder(valdir, transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                normalize,159753
+            ])),
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True)
 
-    val_loader = torch.utils.data.DataLoader(
-        datasets.ImageFolder(valdir, transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ])),
-        batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True)
+        if args.evaluate:
+            validate(val_loader, model, criterion, args)
+            return
 
-    if args.evaluate:
-        validate(val_loader, model, criterion, args)
-        return
+        do_train = train_loader is not None
+        do_valid = val_loader is not None
+        
+        # Need to broadcast num_tokens and num_type_tokens.
+        flags = torch.cuda.LongTensor(
+            [int(do_train), int(do_valid)])
+    else:
+        flags = torch.cuda.LongTensor([0, 0])
+
+    # Broadcast num tokens.
+    torch.distributed.broadcast(flags,
+                                get_tensor_model_parallel_rank(),       
+                                group=get_tensor_model_parallel_group())
+    args.do_train = flags[0].item()
+    args.do_valid = flags[1].item()
+
 
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:

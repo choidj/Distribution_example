@@ -58,7 +58,7 @@ def divide(numerator, denominator):
 
 def split_tensor_along_last_dim(tensor, num_partitions,
                                 kernel_size, padding, conv,
-                                contiguous_split_chunks=False):
+                                contiguous_split_chunks=False, ver="width"):
     """Split a tensor along its last dimension.
     Arguments:
         tensor: input tensor.
@@ -80,13 +80,16 @@ def split_tensor_along_last_dim(tensor, num_partitions,
     tensor_list = torch.split(tensor, last_dim_size, dim=last_dim)
     
     
-    if conv and padding_int != 0:
+    if conv and padding_int != 0 and ver == "width":
         tensor_list = list(tensor_list)
         padded_tensor = custom_pad(tensor_list, padding_int, last_dim, num_partitions)
             
         tensor_list[rank] = padded_tensor
         tensor_list = tuple(tensor_list)
-
+    elif ver == "channel":
+        last_dim_size = divide(tensor.size()[1], num_partitions)
+        # Split.
+        tensor_list = torch.split(tensor, last_dim_size, dim=last_dim)
     if not __debug__:
         print("[Rank {} GPU] Division size : {}, **TO CUSTOM SPLIT** Splited Input Size : ".format(str(rank), str(last_dim_size)), tensor_list[rank].size())
         print("[Rank {} GPU] Padding : {}, **TO CUSTOM SPLIT** Splited Input (0, 0, padding, ) : ".format(str(rank), str(padding_int), str(last_dim_size)), tensor_list[rank][0][0][padding_int])
