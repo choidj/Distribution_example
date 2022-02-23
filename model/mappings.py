@@ -50,9 +50,7 @@ def _gather(input_, kernel_size=0, padding=0, conv=False, ver="width"):
         if rank == 0 and conv:
             print("[Rank {} GPU] **TO GATHER** Input Size -> ".format(str(rank)), input_.size())
             print("[Rank {} GPU] **TO GATHER** Input (0, 0, 0, ) -> ".format(str(rank)), input_[0][0][padding[0]])
-        elif rank == 0 and not conv:
-            print("[Rank {} GPU] **TO GATHER** Input Size -> ".format(str(rank)), input_.size())
-            print("[Rank {} GPU] **TO GATHER** Input (0, 0, 0, ) -> ".format(str(rank)), input_[0][0][0])
+
     
     tensor_list = [torch.empty_like(input_) for _ in range(world_size)]
     tensor_list[rank] = input_
