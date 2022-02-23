@@ -139,21 +139,16 @@ class _ScatterToModelParallelRegion(torch.autograd.Function):
 
 class _GatherFromModelParallelRegion(torch.autograd.Function):
     @staticmethod
-    def symbolic(graph, input_, kernel_size, padding, conv, ver):
-        return _gather(input_, kernel_size, padding, conv, ver)
+    def symbolic(graph, input_):
+        return _gather(input_)
     
     @staticmethod
-    def forward(ctx, input_, kernel_size, padding, conv, ver):
-        ctx.save_for_backward(kernel_size)
-        ctx.save_for_backward(padding)
-        ctx.save_for_backward(conv)
-        ctx.save_for_backward(ver)
-        return _gather(input_, kernel_size, padding, conv, ver)
+    def forward(ctx, input_):
+        return _gather(input_)
 
     @staticmethod
     def backward(ctx, grad_output):
-        kernel_size, padding, conv, ver = ctx.saved_tensors
-        return _split(grad_output, kernel_size, padding, conv, ver)
+        return _split(grad_output)
 
 
 class _CopyToModelParallelRegion(torch.autograd.Function):
