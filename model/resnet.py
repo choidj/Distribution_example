@@ -78,7 +78,7 @@ class WeightParallelConv2d(nn.Conv2d):
                 in_channels, out_channels, kernel_size_, stride_, padding_, dilation_)
 
             group = get_tensor_model_parallel_world_size()
-            print(group[0])
+            print(group)
             if self.transposed:
                     self.weight = nn.Parameter(torch.empty(
                         (in_channels, out_channels // group, *kernel_size), device=torch.cuda.current_device(), **factory_kwargs))
