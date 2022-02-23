@@ -35,7 +35,7 @@ def _split(input_, kernel_size=0, padding=0, conv=False, ver="width"):
     return output
 
 
-def _gather(input_, kernel_size=0, padding=0, conv=False, ver="width"):
+def _gather(input_, kernel_size=0, padding=0, conv=False, ver="weight"):
     """Gather tensors and concatinate along the last dimension."""
     world_size = torch.distributed.get_world_size()
     # Bypass the function if we are using only 1 GPU.

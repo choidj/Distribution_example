@@ -107,12 +107,12 @@ class WeightParallelConv2d(nn.Conv2d):
                             weight, bias, self.stride,
                             _pair(0), self.dilation, self.groups)
 
-            output = gather_from_tensor_model_parallel_region(output, self.kernel_size, self.padding, conv=True, ver="weight")
+            output = gather_from_tensor_model_parallel_region(output)
             return output
 
         output = F.conv2d(input, weight, bias, self.stride,
                         self.padding, self.dilation, self.groups)
-        output = gather_from_tensor_model_parallel_region(output, self.kernel_size, self.padding, conv=True, ver="weight")
+        output = gather_from_tensor_model_parallel_region(output)
         return output
         
     def forward(self, input: Tensor) -> Tensor:
