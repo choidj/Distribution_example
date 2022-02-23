@@ -81,10 +81,10 @@ class WeightParallelConv2d(nn.Conv2d):
             
             if self.transposed:
                     self.weight = nn.Parameter(torch.empty(
-                        (in_channels, out_channels // group, *kernel_size_), **factory_kwargs))
+                        (in_channels // group, out_channels, *kernel_size_), **factory_kwargs))
             else:
                 self.weight = nn.Parameter(torch.empty(
-                    (out_channels, in_channels // group, *kernel_size_), **factory_kwargs))
+                    (out_channels // group, in_channels, *kernel_size_), **factory_kwargs))
             if bias:
                 self.bias = nn.Parameter(torch.empty(out_channels, **factory_kwargs))
             else:
@@ -148,10 +148,10 @@ class ChannelParallelConv2d(nn.Conv2d):
             
             if self.transposed:
                     self.weight = nn.Parameter(torch.empty(
-                        (in_channels // group, out_channels, *kernel_size_), **factory_kwargs))
+                        (in_channels, out_channels // group, *kernel_size_), **factory_kwargs))
             else:
                 self.weight = nn.Parameter(torch.empty(
-                    (out_channels // group, in_channels, *kernel_size_), **factory_kwargs))
+                    (out_channels, in_channels // group, *kernel_size_), **factory_kwargs))
             if bias:
                 self.bias = nn.Parameter(torch.empty(out_channels, **factory_kwargs))
             else:
