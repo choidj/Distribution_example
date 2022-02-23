@@ -67,8 +67,9 @@ def split_tensor_along_last_dim(tensor, num_partitions,
                                  in memory.
     """
     rank = get_tensor_model_parallel_rank()
-    
-    padding_int = padding[0]
+    padding_int = 0
+    if not isinstance(padding, int):
+        padding_int = padding[0]
 
 
     # Get the size and dimension.
