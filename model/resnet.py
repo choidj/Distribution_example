@@ -102,6 +102,7 @@ class WeightParallelConv2d(nn.Conv2d):
     
 
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
+        input = copy_to_tensor_model_parallel_region(input)
         if self.padding_mode != 'zeros':
             output =  F.conv2d(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode),
                             weight, bias, self.stride,
@@ -161,7 +162,7 @@ class ChannelParallelConv2d(nn.Conv2d):
             torch.distributed.broadcast(self.weight, get_tensor_model_parallel_rank(), group=get_tensor_model_parallel_group())
 
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
-        parallel_weight = copy_to_tensor_model_parallel_region(weight)
+        input = copy_to_tensor_model_parallel_region(input)
         if self.padding_mode != 'zeros':
             splited_input = scatter_to_tensor_model_parallel_region(F.pad(input, self._reversed_padding_repeated_twice, mode=self.padding_mode), self.kernel_size, padding=self.padding, conv=True, ver="channel")
             splited_output = F.conv2d(splited_input,
