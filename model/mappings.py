@@ -289,11 +289,13 @@ class _GatherFromModelParallelLinearRegion(torch.autograd.Function):
 class _GatherFromModelParallelConvRegion(torch.autograd.Function):
     @staticmethod
     def symbolic(graph, input_):
-        return _conv_gather(input_)
+        # return _conv_gather(input_)
+        return input_
     
     @staticmethod
     def forward(ctx, input_):
-        return _conv_gather(input_)
+        # return _conv_gather(input_)
+        return input_
 
     @staticmethod
     def backward(ctx, grad_output):
