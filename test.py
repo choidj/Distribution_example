@@ -5,6 +5,7 @@ from model.initialize import initialize_model_parallel
 import torch.distributed as dist
 import random
 import numpy as np
+from model.random import model_parallel_cuda_manual_seed
 
 def test_conv(rank, ngpus_per_node, serial_conv, input_data):
 
