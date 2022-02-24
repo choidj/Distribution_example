@@ -4,7 +4,7 @@ import torch
 from torch import _C
 from torch.cuda import _lazy_call, device as device_ctx_manager
 from torch.utils.checkpoint import detach_variable
-
+from .initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_rank
 
 
 # Default name for the model parallel rng tracker.
@@ -121,3 +121,24 @@ _CUDA_RNG_STATE_TRACKER = CudaRNGStatesTracker()
 def get_cuda_rng_tracker():
     """Get cuda rng tracker."""
     return _CUDA_RNG_STATE_TRACKER
+
+
+def model_parallel_cuda_manual_seed(seed):
+    # 2718 is just for fun and any POSITIVE value will work.
+    offset = seed + 2718
+    tensor_model_parallel_seed = offset + get_tensor_model_parallel_rank()
+    # Data parallel gets the original seed.
+    data_parallel_seed = seed
+
+    if torch.distributed.get_rank() == 0:
+        print('> initializing model parallel cuda seeds on global rank {}, '
+              'model parallel rank {}, and data parallel rank {} with '
+              'model parallel seed: {} and data parallel seed: {}'.format(
+                  torch.distributed.get_rank(), get_tensor_model_parallel_rank(), tensor_model_parallel_seed,
+                  data_parallel_seed), flush=True)
+    _CUDA_RNG_STATE_TRACKER.reset()
+    # Set the default state.
+    torch.cuda.manual_seed(data_parallel_seed)
+    # and model parallel state.
+    _CUDA_RNG_STATE_TRACKER.add(_MODEL_PARALLEL_RNG_TRACKER_NAME,
+                                tensor_model_parallel_seed)

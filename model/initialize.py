@@ -16,7 +16,9 @@
 """Model and data parallel groups."""
 
 import torch
-
+import numpy as np
+import random
+from random import model_parallel_cuda_manual_seed
 
 _TENSOR_MODEL_PARALLEL_GROUP = None
 
@@ -49,6 +51,21 @@ def initialize_model_parallel():
     if rank in ranks:
         _TENSOR_MODEL_PARALLEL_GROUP = group
         
+
+def _set_random_seed(seed_):
+    """Set random seed for reproducability."""
+    if seed_ is not None and seed_ > 0:
+        # Ensure that different pipeline MP stages get different seeds.
+        seed = seed_
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.device_count() > 0:
+            model_parallel_cuda_manual_seed(seed)
+    else:
+        raise ValueError('Seed ({}) should be a positive integer.'.format(seed))
+
+
 
 def parallel_is_initialized():
     """Check if model and data parallel groups are initialized."""
