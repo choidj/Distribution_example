@@ -112,7 +112,7 @@ def main_worker(gpu, ngpus_per_node, args):
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url, world_size=args.world_size, rank=args.rank)
     initialize_model_parallel()
 
-    _set_random_seed(0)
+    _set_random_seed(26)
 
     # resnet model 생성.
     model = OwnParallelResnet(100)
