@@ -20,6 +20,7 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 from model.initialize import initialize_model_parallel, get_tensor_model_parallel_rank, get_tensor_model_parallel_group
 
+from model.random import model_parallel_cuda_manual_seed
 from model.resnet import OwnParallelResnet
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
@@ -110,6 +111,9 @@ def main_worker(gpu, ngpus_per_node, args):
         # torch distributed 초기화함. 여기서 world_size는 모든 분산처리 시스템에 가담하는 GPU 개수이고, rank는 현재 프로세스가 사용할 GPU의 id를 말한다. 
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url, world_size=args.world_size, rank=args.rank)
     initialize_model_parallel()
+
+    _set_random_seed(0)
+
     # resnet model 생성.
     model = OwnParallelResnet(100)
     
@@ -380,6 +384,22 @@ def accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
+
+
+def _set_random_seed(seed_):
+    """Set random seed for reproducability."""
+    if seed_ is not None and seed_ > 0:
+        # Ensure that different pipeline MP stages get different seeds.
+        seed = seed_
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.device_count() > 0:
+            model_parallel_cuda_manual_seed(seed)
+    else:
+        raise ValueError('Seed ({}) should be a positive integer.'.format(seed))
+
+
 
 
 if __name__ == '__main__':
