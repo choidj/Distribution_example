@@ -3,7 +3,8 @@ import torch.multiprocessing as mp
 from model.resnet import  WeightParallelConv2d
 from model.initialize import initialize_model_parallel
 import torch.distributed as dist
-
+import random
+import numpy as np
 
 def test_conv(rank, ngpus_per_node, serial_conv, input_data):
 
@@ -15,6 +16,9 @@ def test_conv(rank, ngpus_per_node, serial_conv, input_data):
 
     dist.init_process_group(backend="nccl", init_method="tcp://127.0.0.1:6006", world_size=ngpus_per_node, rank=rank)
     initialize_model_parallel()
+
+    _set_random_seed(26)
+
     #for p in parallel_conv.parameters():
         #print("[ rank {} ] parallel weight : ".format(str(rank)), p)
     torch.cuda.set_device(rank)
@@ -82,7 +86,18 @@ def main():
 
     mp.spawn(test_conv, nprocs=ngpus_per_node, args=(ngpus_per_node, serial_conv,  input_data,))
 
-
+def _set_random_seed(seed_):
+    """Set random seed for reproducability."""
+    if seed_ is not None and seed_ > 0:
+        # Ensure that different pipeline MP stages get different seeds.
+        seed = seed_
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.device_count() > 0:
+            model_parallel_cuda_manual_seed(seed)
+    else:
+        raise ValueError('Seed ({}) should be a positive integer.'.format(seed))
 
 if __name__ == '__main__':
     main()
