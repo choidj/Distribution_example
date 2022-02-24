@@ -9,6 +9,7 @@ from typing import Optional, Union
 from .mappings import gather_from_tensor_model_parallel_region, copy_to_tensor_model_parallel_region, scatter_to_tensor_model_parallel_region, reduce_from_tensor_model_parallel_region, gather_from_tensor_model_parallel_conv_region, gather_from_tensor_model_parallel_linear_region
 from .initialize import get_tensor_model_parallel_group, get_tensor_model_parallel_rank, get_tensor_model_parallel_world_size
 from .utils import divide
+from .random import get_cuda_rng_tracker
 import torch.nn.init as init
 from torch import Tensor
 from torch.nn import functional as F
@@ -28,7 +29,16 @@ class ParallelType(Enum):
     WeightParallel = 2
 
 
+def _initialize_weight_affine_gpu(weight, init_method):
+    """Initialize affine weight for model parallel on GPU."""
+    with get_cuda_rng_tracker().fork():
+        init_method(weight)
 
+
+def _initialize_weight_conv_gpu(weight, init_method, _math):
+    """Initialize affine weight for model parallel on GPU."""
+    with get_cuda_rng_tracker().fork():
+        init_method(weight, _math)
 
 
 class WidthParallelConv2d(nn.Conv2d):
@@ -37,6 +47,8 @@ class WidthParallelConv2d(nn.Conv2d):
         super(WidthParallelConv2d, self).__init__(in_channels, out_channels, kernel_size, stride,
                  padding, dilation, groups, bias, device=torch.cuda.current_device(), **kwargs)
         self.ngpus_per_node = torch.cuda.device_count()
+
+        _initialize_weight_conv_gpu(self.weight, init.kaiming_uniform_, math.sqrt(5))
         
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
         parallel_weight = copy_to_tensor_model_parallel_region(weight)
@@ -90,7 +102,7 @@ class WeightParallelConv2d(nn.Conv2d):
             else:
                 self.register_parameter('bias', None)
 
-            self.reset_parameters()
+            _initialize_weight_conv_gpu(self.weight, init.kaiming_uniform_, math.sqrt(5))
 
 
     def reset_parameters(self) -> None:
@@ -159,6 +171,8 @@ class ChannelParallelConv2d(nn.Conv2d):
                 self.register_parameter('bias', None)
             if get_tensor_model_parallel_rank() == 0:
                 self.reset_parameters()
+            _initialize_weight_conv_gpu(self.weight, init.kaiming_uniform_, math.sqrt(5))
+
             torch.distributed.broadcast(self.weight, get_tensor_model_parallel_rank(), group=get_tensor_model_parallel_group())
 
     def _conv_forward(self, input: Tensor, weight: Tensor, bias: Optional[Tensor]):
@@ -270,7 +284,7 @@ class ColumnParallelLinear(torch.nn.Linear):
         self.weight = nn.Parameter(torch.empty(
             self.output_size_per_partition, self.in_features,
             device=torch.cuda.current_device()))
-
+        _initialize_weight_affine_gpu(self.weight, init_method=init.xavier_normal_)    
         self.bias = nn.Parameter(torch.empty(
             self.output_size_per_partition,
             device=torch.cuda.current_device()))
@@ -300,7 +314,7 @@ class OwnParallelResnet(nn.Module):
     def __init__(
             self,
             type: ParallelType = ParallelType.HybridParallel,
-            layers: List[int] = [3, 4, 23, 3],
+            layers: List[int] = [3, 8, 36, 3],
             num_classes: int = 1000,
             zero_init_residual: bool = False,
             groups: int = 1,
