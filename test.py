@@ -79,7 +79,7 @@ def main():
         print("__HARD DEBUG MODE__")
     # 한 노드의 GPU수를 가져옴.
     ngpus_per_node = torch.cuda.device_count()
-    input_data = torch.randn(1, 3, 224, 224)
+    input_data = torch.randn(64, 3, 224, 224)
     # multiprocessing_distributed 변수가 true라면, world_size를 총 GPU개수로 설정한 후에, 메인 워커를 실행함.
     serial_conv = torch.nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                 bias=False)
