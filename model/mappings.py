@@ -157,8 +157,7 @@ def _conv_gather(input_):
 
     # Note: torch.cat already creates a contiguous tensor.
     output = torch.cat(tensor_list, dim=1).contiguous()
-    print("[Rank {} GPU] **GATHERED** Output Size : {}".format(str(rank), str(output.size())))
-
+    
     return output
 
 
