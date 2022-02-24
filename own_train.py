@@ -19,6 +19,8 @@ import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
+import torch.profiler
+
 from model.initialize import initialize_model_parallel, get_tensor_model_parallel_rank, get_tensor_model_parallel_group
 
 from model.random import model_parallel_cuda_manual_seed
@@ -176,7 +178,7 @@ def main_worker(gpu, ngpus_per_node, args):
         validate(val_loader, model, criterion, args)
         return
 
-    print("val_loader: ", val_loader)
+
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
@@ -210,37 +212,51 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     model.train()
     if get_tensor_model_parallel_rank() == 0:
         end = time.time()
-    for i, (images, target) in enumerate(train_loader):
-        if get_tensor_model_parallel_rank() == 0:
-            # measure data loading time
-            data_time.update(time.time() - end)
+    with torch.profiler.profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA],
+        schedule=torch.profiler.schedule(
+            wait=1,
+            warmup=1,
+            active=2),
+        on_trace_ready=torch.profiler.tensorboard_trace_handler('./result', worker_name='worker0'),
+        record_shapes=True,
+        profile_memory=True,  # This will take 1 to 2 minutes. Setting it to False could greatly speedup.
+        with_stack=True
+    ) as p:
+        for i, (images, target) in enumerate(train_loader):
+            if get_tensor_model_parallel_rank() == 0:
+                # measure data loading time
+                data_time.update(time.time() - end)
 
-        if args.gpu is not None:
-            images = images.cuda(args.gpu, non_blocking=True)
-        if torch.cuda.is_available():
-            target = target.cuda(args.gpu, non_blocking=True)
+            if args.gpu is not None:
+                images = images.cuda(args.gpu, non_blocking=True)
+            if torch.cuda.is_available():
+                target = target.cuda(args.gpu, non_blocking=True)
 
-        # compute output
-        output = model(images)
-        loss = criterion(output, target)
-        if get_tensor_model_parallel_rank() == 0:
-            # measure accuracy and record loss
-            acc1, acc5 = accuracy(output, target, topk=(1, 5))
-            losses.update(loss.item(), images.size(0))
-            top1.update(acc1[0], images.size(0))
-            top5.update(acc5[0], images.size(0))
+            # compute output
+            output = model(images)
+            loss = criterion(output, target)
+            if get_tensor_model_parallel_rank() == 0:
+                # measure accuracy and record loss
+                acc1, acc5 = accuracy(output, target, topk=(1, 5))
+                losses.update(loss.item(), images.size(0))
+                top1.update(acc1[0], images.size(0))
+                top5.update(acc5[0], images.size(0))
 
-        # compute gradient and do SGD step
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        if get_tensor_model_parallel_rank() == 0:
-            # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
+            # compute gradient and do SGD step
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            if get_tensor_model_parallel_rank() == 0:
+                # measure elapsed time
+                batch_time.update(time.time() - end)
+                end = time.time()
 
-            if i % args.print_freq == 0:
-                progress.display(i)
+                if i % args.print_freq == 0:
+                    progress.display(i)
+            p.step()
 
 
 def validate(val_loader, model, criterion, args):
