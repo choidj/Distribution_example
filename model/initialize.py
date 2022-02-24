@@ -18,7 +18,6 @@
 import torch
 import numpy as np
 import random
-from .random import model_parallel_cuda_manual_seed
 
 _TENSOR_MODEL_PARALLEL_GROUP = None
 
