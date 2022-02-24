@@ -5,6 +5,7 @@ import shutil
 import time
 import warnings
 from enum import Enum
+import numpy as np
 
 import torch
 import torch.nn as nn
