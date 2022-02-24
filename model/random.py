@@ -131,7 +131,7 @@ def model_parallel_cuda_manual_seed(seed):
 
     if torch.distributed.get_rank() == 0:
         print('> initializing model parallel cuda seeds on global rank {}, '
-              'model parallel rank {}, and data parallel rank {} with '
+              'model parallel rank {} with '
               'model parallel seed: {} and data parallel seed: {}'.format(
                   torch.distributed.get_rank(), get_tensor_model_parallel_rank(), tensor_model_parallel_seed,
                   data_parallel_seed), flush=True)
