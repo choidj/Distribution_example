@@ -45,9 +45,13 @@ def test_conv(rank, ngpus_per_node, serial_conv, input_data):
         
         #for p in serial_conv.parameters():
             #print("serial weight :",  p)
-   
+        start = torch.cuda.Event(enable_timing=True) 
+        end = torch.cuda.Event(enable_timing=True) 
+        
         start.record()
+    torch.cuda.synchronize()
     parallel_result = parallel_conv_(input_)
+    torch.cuda.synchronize()
     if rank == 0:
         end.record()
 
@@ -65,8 +69,8 @@ def test_conv(rank, ngpus_per_node, serial_conv, input_data):
         assert torch.allclose(parallel_result, serial_result), "Parallel and Serial results are not the same"
         print("Parallel and Serial Result are same.")
         print("***Conv layer Test Passed!!***")
-        print("Serial elapsed time : {:.2f} ms".format(serial_result_time))
-        print("Parallel elapsed time : {:.2f} ms".format(parallel_result_time))
+        print("Serial elapsed time : {serial_result_time} ms")
+        print("Parallel elapsed time : {parallel_result_time} ms")
 
 
 

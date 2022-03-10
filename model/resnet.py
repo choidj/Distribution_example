@@ -324,7 +324,6 @@ class OwnParallelResnet(nn.Module):
         ) -> None:
             super(OwnParallelResnet, self).__init__()
 
-            
             self.inplanes = 64
             self.dilation = 1
             
